@@ -6,6 +6,7 @@ from typing import Dict, List, Optional
 from collections import defaultdict
 import chess.pgn
 from io import StringIO
+import re
 
 from app.utils.timezone_utils import (
     convert_utc_to_timezone, 
@@ -130,50 +131,181 @@ class AnalyticsService:
     
     def _extract_opening_name(self, pgn_string: str) -> str:
         """
-        Extract opening name from PGN.
+        Extract opening name from PGN without ECO codes.
         
         Args:
             pgn_string: PGN string from game data
             
         Returns:
-            Opening name or 'Unknown'
+            Human-readable opening name or 'Unknown Opening'
         """
         if not pgn_string:
-            return 'Unknown'
+            return 'Unknown Opening'
         
         try:
             pgn = StringIO(pgn_string)
             game = chess.pgn.read_game(pgn)
             
             if game is None:
-                return 'Unknown'
+                return 'Unknown Opening'
             
-            # Try to get ECO from headers first
+            # Get opening name and ECO from headers
             eco = game.headers.get('ECO', '')
             opening_name = game.headers.get('Opening', '')
+            eco_url = game.headers.get('ECOUrl', '')
             
+            # Strategy 1: Use Opening header and remove ECO code
             if opening_name:
-                # Remove ECO code if it's at the start
-                if opening_name.startswith(eco) and eco:
-                    opening_name = opening_name[len(eco):].strip()
-                    opening_name = opening_name.lstrip(':').strip()
-                return opening_name
+                # Remove ECO code pattern (e.g., "C00: ", "E04: ")
+                import re
+                # Match ECO pattern at start: letter followed by 2 digits, optional colon/space
+                cleaned_name = re.sub(r'^[A-E]\d{2}[\s:]*', '', opening_name).strip()
+                
+                if cleaned_name:
+                    return cleaned_name
             
-            # Fallback: try to identify from moves (first 5-10 moves)
+            # Strategy 2: Try to extract from ECOUrl (Chess.com specific)
+            if eco_url:
+                # ECOUrl format: https://www.chess.com/openings/...
+                # Extract the path and convert to readable name
+                try:
+                    path = eco_url.split('/openings/')[-1]
+                    # Convert URL slug to readable name
+                    readable = path.replace('-', ' ').title()
+                    # Remove trailing numbers and clean up
+                    readable = re.sub(r'\s+\d+$', '', readable).strip()
+                    if readable and len(readable) > 2:
+                        return readable
+                except:
+                    pass
+            
+            # Strategy 3: Identify from first moves using common patterns
             board = game.board()
             moves = []
             for move in list(game.mainline_moves())[:10]:
                 moves.append(board.san(move))
                 board.push(move)
             
-            # Use ECO code if available, otherwise return "Unknown"
-            if eco:
-                return f"Opening ({eco})"
+            if moves:
+                opening_from_moves = self._identify_opening_from_moves(moves)
+                if opening_from_moves != 'Unknown Opening':
+                    return opening_from_moves
             
-            return 'Unknown'
+            # Last resort: return "Unknown Opening" instead of ECO code
+            return 'Unknown Opening'
             
         except Exception:
-            return 'Unknown'
+            return 'Unknown Opening'
+    
+    def _identify_opening_from_moves(self, moves: List[str]) -> str:
+        """
+        Identify opening from move sequence using common patterns.
+        
+        Args:
+            moves: List of moves in SAN notation
+            
+        Returns:
+            Opening name or 'Unknown Opening'
+        """
+        if not moves or len(moves) < 2:
+            return 'Unknown Opening'
+        
+        # Common opening patterns (first 2-4 moves)
+        move_str = ' '.join(moves[:4]).lower()
+        
+        # Comprehensive opening database based on first moves
+        opening_patterns = {
+            # King's Pawn Openings (1.e4)
+            'e4 e5': {
+                'nf3 nc6': {
+                    'bb5': 'Ruy Lopez',
+                    'bc4': 'Italian Game',
+                    'd4': 'Scotch Game',
+                    'nc3': 'Four Knights Game',
+                },
+                'nf3 nf6': 'Petrov Defense',
+                'f4': 'King\'s Gambit',
+                'bc4': 'Bishop\'s Opening',
+                'd4': 'Center Game',
+                'nc3': 'Vienna Game',
+            },
+            'e4 c5': 'Sicilian Defense',
+            'e4 e6': 'French Defense',
+            'e4 c6': 'Caro-Kann Defense',
+            'e4 d5': 'Scandinavian Defense',
+            'e4 nf6': 'Alekhine Defense',
+            'e4 d6': 'Pirc Defense',
+            'e4 g6': 'Modern Defense',
+            'e4 nc6': 'Nimzowitsch Defense',
+            
+            # Queen's Pawn Openings (1.d4)
+            'd4 d5': {
+                'c4': {
+                    'e6': 'Queen\'s Gambit Declined',
+                    'c6': 'Slav Defense',
+                    'dxc4': 'Queen\'s Gambit Accepted',
+                    'nf6': 'Queen\'s Gambit Declined',
+                },
+                'nf3 nf6': 'Queen\'s Pawn Game',
+                'e3': 'Queen\'s Pawn Game',
+                'bf4': 'London System',
+            },
+            'd4 nf6': {
+                'c4 e6': 'Queen\'s Indian Defense',
+                'c4 g6': 'King\'s Indian Defense',
+                'c4 c5': 'Benoni Defense',
+                'nf3': 'Indian Game',
+                'bf4': 'London System',
+            },
+            'd4 f5': 'Dutch Defense',
+            'd4 g6': 'King\'s Indian Defense',
+            'd4 e6': 'Queen\'s Pawn Game',
+            'd4 d6': 'Pirc Defense',
+            
+            # Other Openings
+            'nf3 d5': 'Réti Opening',
+            'nf3 nf6': 'Réti Opening',
+            'c4 e5': 'English Opening',
+            'c4 nf6': 'English Opening',
+            'c4 c5': 'English Opening',
+            'f4': 'Bird Opening',
+            'b3': 'Larsen Opening',
+            'nc3 d5': 'Dunst Opening',
+            'e3': 'Van\'t Kruijs Opening',
+            'g3': 'King\'s Fianchetto Opening',
+        }
+        
+        # Try to match patterns with decreasing move counts
+        for depth in [4, 3, 2]:
+            test_moves = ' '.join(moves[:depth]).lower()
+            
+            # Check exact match first
+            if test_moves in opening_patterns:
+                result = opening_patterns[test_moves]
+                if isinstance(result, str):
+                    return result
+                # Continue checking deeper if dict
+                
+            # Check nested patterns
+            for pattern, value in opening_patterns.items():
+                if test_moves.startswith(pattern):
+                    if isinstance(value, str):
+                        return value
+                    elif isinstance(value, dict):
+                        # Check next level
+                        remaining = test_moves[len(pattern):].strip()
+                        for sub_pattern, opening_name in value.items():
+                            if remaining.startswith(sub_pattern):
+                                if isinstance(opening_name, str):
+                                    return opening_name
+                                elif isinstance(opening_name, dict):
+                                    # Check third level
+                                    remaining2 = remaining[len(sub_pattern):].strip()
+                                    for sub2_pattern, final_name in opening_name.items():
+                                        if remaining2.startswith(sub2_pattern):
+                                            return final_name
+        
+        return 'Unknown Opening'
     
     def _extract_termination(self, game: Dict) -> str:
         """
