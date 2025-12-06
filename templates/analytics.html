@@ -6,6 +6,7 @@
     <title>Analytics Dashboard - Chess Analytics</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 </head>
 <body>
     <nav class="navbar">
@@ -158,7 +159,7 @@
                 <div class="section-card">
                     <div class="section-header">
                         <h3>📈 Overall Performance Over Time</h3>
-                        <p class="section-description">Track your win/loss/draw trends over the analysis period</p>
+                        <p class="section-description">Track your win rate percentage trend over the analysis period</p>
                     </div>
                     <div class="chart-container">
                         <canvas id="overallPerformanceChart"></canvas>
@@ -168,26 +169,27 @@
 
             <!-- Section 2: Color Performance -->
             <section class="analytics-section">
-                <div class="section-grid-2">
-                    <div class="section-card">
-                        <div class="section-header">
-                            <h3>⚪ White Performance</h3>
-                            <p class="section-description">Your performance as White pieces</p>
-                        </div>
-                        <div class="chart-container">
-                            <canvas id="whitePerformanceChart"></canvas>
-                        </div>
-                        <div class="stats-summary" id="whiteStats"></div>
+                <div class="section-card">
+                    <div class="section-header">
+                        <h3>♟️ Performance by Color</h3>
+                        <p class="section-description">Compare your win rate as White versus Black</p>
                     </div>
-                    <div class="section-card">
-                        <div class="section-header">
-                            <h3>⚫ Black Performance</h3>
-                            <p class="section-description">Your performance as Black pieces</p>
+                    
+                    <!-- Summary Cards -->
+                    <div class="color-summary-grid">
+                        <div class="color-summary-card white-card">
+                            <h4>⚪ White</h4>
+                            <div class="color-stats" id="whiteSummary"></div>
                         </div>
-                        <div class="chart-container">
-                            <canvas id="blackPerformanceChart"></canvas>
+                        <div class="color-summary-card black-card">
+                            <h4>⚫ Black</h4>
+                            <div class="color-stats" id="blackSummary"></div>
                         </div>
-                        <div class="stats-summary" id="blackStats"></div>
+                    </div>
+                    
+                    <!-- Combined Chart -->
+                    <div class="chart-container">
+                        <canvas id="colorPerformanceChart"></canvas>
                     </div>
                 </div>
             </section>
@@ -282,9 +284,6 @@
                             <div class="strength-stats"></div>
                         </div>
                     </div>
-                    <div class="chart-container">
-                        <canvas id="opponentStrengthChart"></canvas>
-                    </div>
                 </div>
             </section>
 
@@ -311,9 +310,6 @@
                             <p class="time-subtitle">10:00 PM - 6:00 AM</p>
                             <div class="time-stats"></div>
                         </div>
-                    </div>
-                    <div class="chart-container">
-                        <canvas id="timeOfDayChart"></canvas>
                     </div>
                 </div>
             </section>

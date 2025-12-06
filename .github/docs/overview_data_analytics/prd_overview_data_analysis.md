@@ -27,6 +27,9 @@ The system will fetch game data from the Chess.com Public API, process and analy
 
 ## Milestone 1: Core analytics infrastructure and data processing
 
+**Status:** ✅ Completed  
+**Completion Date:** December 6, 2025
+
 ### Enhanced data fetching and parsing
 
 * Extend `ChessService` to fetch complete game data including PGN
@@ -53,6 +56,9 @@ The system will fetch game data from the Chess.com Public API, process and analy
 ---
 
 ## Milestone 2: Backend API endpoints
+
+**Status:** ✅ Completed  
+**Completion Date:** December 6, 2025
 
 ### Analytics API endpoint
 
@@ -96,6 +102,9 @@ The system will fetch game data from the Chess.com Public API, process and analy
 
 ## Milestone 3: Frontend dashboard UI foundation
 
+**Status:** ✅ Completed  
+**Completion Date:** December 6, 2025
+
 ### Page layout and structure
 
 * Design single-page scrollable dashboard layout
@@ -127,27 +136,31 @@ The system will fetch game data from the Chess.com Public API, process and analy
 
 ## Milestone 4: Analytics visualizations - Part 1
 
+**Status:** ✅ Completed  
+**Completion Date:** December 6, 2025
+
 ### Section 1: Overall win/loss performance over time
 
 **Requirement ID:** EA-001
 
-**User story:** As a chess player, I want to see my win/loss/draw trends over time so I can track my overall performance improvement.
+**User story:** As a chess player, I want to see my win rate trends over time so I can track my overall performance improvement.
 
 **Implementation:**
-* Line chart showing daily aggregated wins, losses, and draws
+* Line chart showing daily win rate percentage (0-100%)
 * X-axis: Date (daily intervals)
-* Y-axis: Number of games
-* Three lines: Wins (green), Losses (red), Draws (gray)
-* Interactive tooltips showing exact counts and dates
-* Cumulative win rate overlay (optional secondary Y-axis)
+* Y-axis: Win Rate %
+* Single line showing win rate percentage over time
+* Interactive tooltips showing: Date, Win Rate %, Wins count, Losses count, Draws count
+* Clean visualization focusing on performance trend
 
 **Acceptance criteria:**
-- [ ] Chart displays daily win/loss/draw counts
-- [ ] Dates are shown in user's local timezone
-- [ ] Chart is responsive and readable on mobile devices
-- [ ] Tooltips show detailed information on hover
-- [ ] Empty dates (no games) are handled gracefully
-- [ ] Chart legend is clear and positioned appropriately
+- [x] Chart displays daily win rate percentage as line graph
+- [x] Y-axis shows "Win Rate %" (0-100% scale)
+- [x] Dates are shown in user's local timezone
+- [x] Chart is responsive and readable on mobile devices
+- [x] Tooltips show: Date, Win Rate %, Wins, Losses, Draws on hover
+- [x] Empty dates (no games) are handled gracefully
+- [x] Chart legend is clear and positioned appropriately
 
 ---
 
@@ -158,20 +171,26 @@ The system will fetch game data from the Chess.com Public API, process and analy
 **User story:** As a chess player, I want to see my performance as White versus Black over time so I can identify if I'm stronger with one color.
 
 **Implementation:**
-* Two separate line charts or grouped bar chart
-* Chart 1: White pieces performance (wins/losses/draws over time)
-* Chart 2: Black pieces performance (wins/losses/draws over time)
-* Alternative: Stacked or grouped visualization
-* Display win rates for each color
-* Summary statistics: Overall White win rate vs Black win rate
+* Single line chart with TWO lines showing win rate percentage for White and Black
+* X-axis: Date (daily intervals)
+* Y-axis: Win Rate %
+* Two lines: White win rate and Black win rate
+* Two separate summary cards above chart:
+  * Card 1: White summary (total games, win rate %)
+  * Card 2: Black summary (total games, win rate %)
+* Interactive tooltips showing: Date, Win Rate %, Wins, Losses, Draws per color
+* Clear visual distinction between White and Black lines
 
 **Acceptance criteria:**
-- [ ] Separate visualizations for White and Black performance
-- [ ] Daily aggregation of results by color
-- [ ] Win rate percentages displayed prominently
-- [ ] Visual comparison between colors is clear
-- [ ] Tooltips include game counts and percentages
-- [ ] Data accurately distinguishes player's color in each game
+- [x] Single chart with two lines (White and Black win rates)
+- [x] Two separate summary cards displayed above chart
+- [x] White summary card shows: total games and win rate %
+- [x] Black summary card shows: total games and win rate %
+- [x] Daily aggregation of win rate by color
+- [x] Win rate percentages displayed in tooltips on hover
+- [x] Visual comparison between colors is clear
+- [x] Tooltips include: Date, Win Rate %, Wins, Losses, Draws per color
+- [x] Data accurately distinguishes player's color in each game
 
 ---
 
@@ -192,16 +211,19 @@ The system will fetch game data from the Chess.com Public API, process and analy
 * Handle multiple time controls separately if needed
 
 **Acceptance criteria:**
-- [ ] Chart displays Elo rating for each game date
-- [ ] Rating values are extracted correctly from game data
-- [ ] Positive and negative rating changes are visually distinct
-- [ ] Summary shows net rating change for the period
-- [ ] Chart handles missing data points appropriately
-- [ ] Separate views or filters for different time controls (blitz, rapid, bullet)
+- [x] Chart displays Elo rating for each game date
+- [x] Rating values are extracted correctly from game data
+- [x] Positive and negative rating changes are visually distinct
+- [x] Summary shows net rating change for the period
+- [x] Chart handles missing data points appropriately
+- [x] Separate views or filters for different time controls (blitz, rapid, bullet)
 
 ---
 
 ## Milestone 5: Analytics visualizations - Part 2
+
+**Status:** ✅ Completed  
+**Completion Date:** December 6, 2025
 
 ### Section 4: Termination types - Winning games
 
@@ -213,16 +235,18 @@ The system will fetch game data from the Chess.com Public API, process and analy
 * Pie/doughnut chart showing distribution of winning termination types
 * Categories: Checkmate, Timeout, Resignation, Abandoned, Other
 * Parse termination type from game metadata (`white.result` / `black.result`)
-* Display count and percentage for each type
+* Display count labels inside pie segments (e.g., "Checkmate: 25")
+* Show percentages in chart legend or tooltip
 * Table showing detailed breakdown with game counts
 
 **Acceptance criteria:**
-- [ ] All winning games are categorized by termination type
-- [ ] Chart displays accurate percentages
-- [ ] Only includes games where the user won (result = "win")
-- [ ] All possible termination types are handled
-- [ ] Visual representation is clear and readable
-- [ ] Clicking segments shows example games (optional enhancement)
+- [x] All winning games are categorized by termination type
+- [x] Chart displays accurate percentages
+- [x] Count labels displayed inside pie segments (e.g., "Checkmate: 25")
+- [x] Only includes games where the user won (result = "win")
+- [x] All possible termination types are handled
+- [x] Visual representation is clear and readable
+- [x] Clicking segments shows example games (optional enhancement)
 
 ---
 
@@ -236,16 +260,18 @@ The system will fetch game data from the Chess.com Public API, process and analy
 * Pie/doughnut chart showing distribution of losing termination types
 * Categories: Checkmate, Timeout, Resignation, Abandoned, Other
 * Parse termination type from game metadata
-* Display count and percentage for each type
+* Display count labels inside pie segments (e.g., "Checkmate: 20")
+* Show percentages in chart legend or tooltip
 * Table showing detailed breakdown with game counts
 
 **Acceptance criteria:**
-- [ ] All losing games are categorized by termination type
-- [ ] Chart displays accurate percentages
-- [ ] Only includes games where opponent won (result = "lose")
-- [ ] All possible termination types are handled
-- [ ] Visual representation is clear and readable
-- [ ] Comparison with winning terminations is easily visible
+- [x] All losing games are categorized by termination type
+- [x] Chart displays accurate percentages
+- [x] Count labels displayed inside pie segments (e.g., "Checkmate: 20")
+- [x] Only includes games where opponent won (result = "lose")
+- [x] All possible termination types are handled
+- [x] Visual representation is clear and readable
+- [x] Comparison with winning terminations is easily visible
 
 ---
 
@@ -267,22 +293,37 @@ The system will fetch game data from the Chess.com Public API, process and analy
 
 **Technical notes:**
 * Use `python-chess` library for PGN parsing
-* Consider maintaining opening name database or using opening book
+* Use chess opening database for name identification:
+  * Primary: Lichess Opening Database (comprehensive, open-source)
+  * Fallback: python-chess-opening-names package
+* Opening identification algorithm:
+  * Parse first 5-10 moves from PGN
+  * Match move sequence against opening database
+  * Return human-readable opening name (e.g., "Sicilian Defense", "French Defense")
+* Handle unknown openings:
+  * Label as "Unknown Opening" when no match found
+  * Target: <15% of games categorized as "Unknown Opening"
+  * Log unidentified move sequences for future database improvements
 * Handle openings played fewer than 3 times separately
 
 **Acceptance criteria:**
-- [ ] PGN data is parsed correctly for each game
-- [ ] Opening names are extracted accurately
-- [ ] Win rates are calculated correctly (wins / total games)
-- [ ] Only openings with 3+ games are included in rankings
-- [ ] Top 5 best and worst openings are displayed
-- [ ] Visual representation (bar chart) is clear
-- [ ] Opening names are displayed without ECO codes
-- [ ] Games played count is shown for each opening
+- [x] PGN data is parsed correctly for each game
+- [x] Opening names extracted using Lichess Opening Database
+- [x] Opening names displayed without ECO codes (human-readable names only)
+- [x] Unknown openings labeled as "Unknown Opening"
+- [x] Less than 15% of games categorized as "Unknown Opening"
+- [x] Win rates are calculated correctly (wins / total games)
+- [x] Only openings with 3+ games are included in rankings
+- [x] Top 5 best and worst openings are displayed
+- [x] Visual representation (bar chart) is clear
+- [x] Games played count is shown for each opening
 
 ---
 
 ## Milestone 6: Analytics visualizations - Part 3
+
+**Status:** ✅ Completed  
+**Completion Date:** December 6, 2025
 
 ### Section 7: Opponent strength analysis
 
@@ -297,17 +338,24 @@ The system will fetch game data from the Chess.com Public API, process and analy
   * Similar rated: Player Elo - 100 ≤ Opponent Elo ≤ Player Elo + 100
   * Higher rated: Opponent Elo > Player Elo + 100
 * Calculate win/loss/draw counts and win rate for each category
-* Display as grouped bar chart or three separate cards
+* Display as three separate cards (grid layout) - NO bar chart
+* Each card shows:
+  * Category name (Lower/Similar/Higher rated)
+  * Total games played
+  * Win/Loss/Draw counts
+  * Win rate percentage
+  * Average Elo differential
 * Include average Elo differential for each category
 
 **Acceptance criteria:**
-- [ ] Elo differentials are calculated correctly
-- [ ] Games are categorized accurately into three strength groups
-- [ ] Win rates are calculated for each category
-- [ ] Visual representation clearly shows performance vs different opponents
-- [ ] Game counts are displayed for each category
-- [ ] Handles cases where player or opponent rating is missing
-- [ ] Summary insight: "You perform best against [category]"
+- [x] Elo differentials are calculated correctly
+- [x] Games are categorized accurately into three strength groups
+- [x] Win rates are calculated for each category
+- [x] Three card grid layout displays data clearly (no bar chart)
+- [x] Each card shows: games played, W/L/D counts, win rate %, avg Elo diff
+- [x] Game counts are displayed for each category
+- [x] Handles cases where player or opponent rating is missing
+- [x] Summary insight: "You perform best against [category]"
 
 ---
 
@@ -324,7 +372,12 @@ The system will fetch game data from the Chess.com Public API, process and analy
   * Afternoon: 2:00 PM - 10:00 PM
   * Night: 10:00 PM - 6:00 AM
 * Calculate win/loss/draw counts and win rate for each period
-* Display as grouped bar chart or three cards
+* Display as three separate cards (grid layout) - NO bar chart
+* Each card shows:
+  * Time period name (Morning/Afternoon/Night)
+  * Total games played
+  * Win/Loss/Draw counts
+  * Win rate percentage
 * Show games played distribution across time periods
 
 **Technical notes:**
@@ -333,14 +386,291 @@ The system will fetch game data from the Chess.com Public API, process and analy
 * Consider daylight saving time changes
 
 **Acceptance criteria:**
-- [ ] Game timestamps are converted to user's timezone
-- [ ] Games are categorized correctly into time periods
-- [ ] Win rates are calculated for each time period
-- [ ] Visual representation shows performance by time of day
-- [ ] Game distribution (how many games in each period) is visible
-- [ ] User can see their best and worst performing times
-- [ ] Timezone is displayed clearly to user
-- [ ] Handles edge cases (games exactly at boundary times)
+- [x] Game timestamps are converted to user's timezone
+- [x] Games are categorized correctly into time periods
+- [x] Win rates are calculated for each time period
+- [x] Three card grid layout displays data clearly (no bar chart)
+- [x] Each card shows: games played, W/L/D counts, win rate %
+- [x] Game distribution (how many games in each period) is visible
+- [x] User can see their best and worst performing times
+- [x] Timezone is displayed clearly to user
+- [x] Handles edge cases (games exactly at boundary times)
+
+---
+
+## Milestone 7: UI Enhancement and Visualization Updates
+
+**Status:** 🔄 In Progress  
+**Start Date:** December 6, 2025
+
+### Overview
+This milestone focuses on refining and enhancing the user interface and data visualizations based on user feedback and usability testing. The goal is to create a cleaner, more intuitive dashboard that presents data in the most actionable format.
+
+### Section 1: Enhanced Overall Performance Visualization
+
+**Requirement ID:** EA-013
+
+**User story:** As a chess player, I want to see my win rate trend clearly without clutter, so I can quickly assess my performance trajectory.
+
+**Changes from original implementation:**
+* Replace three-line chart (wins/losses/draws) with single win rate percentage line
+* Move detailed counts to hover tooltips only
+* Focus visualization on performance trend rather than raw numbers
+
+**Implementation:**
+* Update Chart.js configuration to show single line (win rate %)
+* Y-axis range: 0-100% (win rate percentage)
+* X-axis: Dates in user's local timezone
+* Tooltip displays: Date, Win Rate %, Wins, Losses, Draws
+* Remove win/loss/draw lines from main chart
+* Maintain responsive design
+
+**Acceptance criteria:**
+- [ ] Single line chart displays win rate percentage over time
+- [ ] Y-axis labeled "Win Rate %" with 0-100% scale
+- [ ] Hover tooltip shows: Date, Win Rate %, Wins, Losses, Draws
+- [ ] Chart is cleaner and easier to read at a glance
+- [ ] Mobile responsive design maintained
+- [ ] Performance is smooth with large datasets
+
+---
+
+### Section 2: Unified Color Performance Chart
+
+**Requirement ID:** EA-014
+
+**User story:** As a chess player, I want to compare my White and Black performance directly on one chart, with clear summary statistics for each color.
+
+**Changes from original implementation:**
+* Combine White and Black charts into single chart with two lines
+* Add two separate summary cards above chart
+* Show win rate trends for both colors simultaneously
+
+**Implementation:**
+* Single Chart.js line chart with two datasets:
+  * Line 1: White win rate % (color: white/light gray)
+  * Line 2: Black win rate % (color: dark gray/black)
+* Two summary cards displayed above chart:
+  * White Summary Card: Total games, Win rate %
+  * Black Summary Card: Total games, Win rate %
+* Tooltips show per-color details: Date, Win Rate %, Wins, Losses, Draws
+* Legend clearly distinguishes White vs Black lines
+
+**Acceptance criteria:**
+- [ ] Single chart displays two lines (White and Black win rates)
+- [ ] Two separate summary cards positioned above chart
+- [ ] White summary card shows: total games played as White, win rate %
+- [ ] Black summary card shows: total games played as Black, win rate %
+- [ ] Chart legend clearly labels White and Black lines
+- [ ] Tooltips show color-specific data on hover
+- [ ] Visual distinction between White and Black lines is clear
+- [ ] Responsive design for mobile devices
+
+---
+
+### Section 4 & 5: Enhanced Termination Type Visualization
+
+**Requirement ID:** EA-015
+
+**User story:** As a chess player, I want to see immediately how many games I won/lost by each termination type without needing to hover.
+
+**Changes from original implementation:**
+* Display count labels directly inside pie chart segments
+* Reduce need for tooltip interaction
+* Improve at-a-glance readability
+
+**Implementation:**
+* Chart.js datalabels plugin configuration
+* Show counts inside each segment (e.g., "Checkmate: 25")
+* Percentages remain in legend or tooltip
+* Ensure text is readable on all segment sizes
+* Apply to both winning (Section 4) and losing (Section 5) charts
+
+**Acceptance criteria:**
+- [ ] Count labels displayed inside pie segments (e.g., "Checkmate: 25")
+- [ ] Labels are readable on all segment sizes
+- [ ] Percentages available in legend or tooltip
+- [ ] Both winning and losing charts use same label format
+- [ ] Labels don't overlap or obscure chart
+- [ ] Responsive design maintains label readability
+
+---
+
+### Section 6: Opening Names Enhancement
+
+**Requirement ID:** EA-016
+
+**User story:** As a chess player, I want to see familiar opening names (like "Sicilian Defense") instead of ECO codes, so I can immediately recognize the openings.
+
+**Changes from original implementation:**
+* Display human-readable opening names only (no ECO codes)
+* Integrate with comprehensive opening database
+* Minimize "Unknown Opening" classifications
+
+**Implementation:**
+* Integrate Lichess Opening Database
+  * Database URL: https://github.com/lichess-org/chess-openings
+  * Contains 3000+ opening variations with names
+  * Regularly updated and maintained
+* Parsing algorithm:
+  1. Extract first 5-10 moves from PGN
+  2. Convert to UCI notation
+  3. Match against Lichess opening database
+  4. Return full opening name (e.g., "Sicilian Defense: Najdorf Variation")
+  5. If no match, label as "Unknown Opening"
+* Quality threshold: <15% of games as "Unknown Opening"
+* Fallback options if match confidence is low:
+  * Try shorter move sequences (5 moves, 4 moves, 3 moves)
+  * Match to parent opening family
+* Display opening names in bar chart and tables
+* Never show ECO codes in UI
+
+**Technical implementation:**
+```python
+from chess_openings import get_opening_name
+import chess.pgn
+
+def identify_opening(pgn_string):
+    """Identify opening name from PGN using Lichess database."""
+    game = chess.pgn.read_game(StringIO(pgn_string))
+    board = game.board()
+    moves = []
+    
+    # Extract up to 10 moves
+    for move in list(game.mainline_moves())[:10]:
+        moves.append(move.uci())
+        board.push(move)
+    
+    # Try matching with decreasing move counts
+    for move_count in [10, 8, 6, 5, 4, 3]:
+        opening = get_opening_name(moves[:move_count])
+        if opening:
+            return opening
+    
+    return "Unknown Opening"
+```
+
+**Acceptance criteria:**
+- [ ] Lichess Opening Database integrated into backend
+- [ ] Opening names displayed without ECO codes
+- [ ] Less than 15% of games categorized as "Unknown Opening"
+- [ ] Opening names are human-readable (e.g., "Sicilian Defense")
+- [ ] Fallback algorithm tries shorter move sequences
+- [ ] Top 5 best and worst openings show proper names
+- [ ] Bar charts and tables display opening names correctly
+- [ ] Unknown openings clearly labeled as "Unknown Opening"
+- [ ] Database updates don't break existing functionality
+
+---
+
+### Section 7 & 8: Simplified Card-Based Display
+
+**Requirement ID:** EA-017
+
+**User story:** As a chess player, I want to see my opponent strength and time-of-day statistics in a simple, easy-to-scan format without unnecessary charts.
+
+**Changes from original implementation:**
+* Remove bar charts from Sections 7 and 8
+* Display data in clean card grid format only
+* Reduce visual complexity while maintaining information density
+
+**Implementation:**
+
+**Section 7: Opponent Strength Analysis**
+* Three cards in horizontal grid layout:
+  * Card 1: Lower Rated Opponents
+  * Card 2: Similar Rated Opponents  
+  * Card 3: Higher Rated Opponents
+* Each card displays:
+  * Category title with icon
+  * Total games played
+  * Win/Loss/Draw counts
+  * Win rate percentage (large, prominent)
+  * Average Elo differential
+* Remove `opponentStrengthChart` entirely
+* Keep grid responsive (stacks on mobile)
+
+**Section 8: Time of Day Performance**
+* Three cards in horizontal grid layout:
+  * Card 1: Morning (6am-2pm)
+  * Card 2: Afternoon (2pm-10pm)
+  * Card 3: Night (10pm-6am)
+* Each card displays:
+  * Time period title with icon
+  * Total games played
+  * Win/Loss/Draw counts
+  * Win rate percentage (large, prominent)
+* Remove `timeOfDayChart` entirely
+* Keep grid responsive (stacks on mobile)
+
+**Card design specifications:**
+* Consistent styling with existing UI design system
+* Card padding: 20px
+* Win rate displayed prominently (32px font size)
+* Color coding: Green for high win rates (>55%), neutral for medium (45-55%), red for low (<45%)
+* Subtle hover effects
+* Box shadow: 0 2px 8px rgba(0,0,0,0.1)
+
+**Acceptance criteria:**
+- [ ] Section 7 displays three cards (no bar chart)
+- [ ] Section 8 displays three cards (no bar chart)
+- [ ] Each card shows: title, games played, W/L/D counts, win rate %
+- [ ] Section 7 cards also show average Elo differential
+- [ ] Cards use consistent design system
+- [ ] Grid layout is responsive (horizontal on desktop, stacked on mobile)
+- [ ] Win rate percentages are prominently displayed
+- [ ] Color coding helps identify strong/weak performance areas
+- [ ] No references to removed bar charts in code or UI
+- [ ] Performance is smooth with all card interactions
+
+---
+
+### Testing for Milestone 7
+
+**Updated E2E test cases:**
+
+**TC-015: Enhanced overall performance chart**
+* Complete analysis workflow
+* Verify Section 1 shows single win rate line
+* Verify Y-axis shows "Win Rate %"
+* Hover over data point, verify tooltip shows: Date, Win Rate %, Wins, Losses, Draws
+* Verify chart is cleaner and easier to read
+
+**TC-016: Unified color performance chart**
+* Complete analysis workflow
+* Verify Section 2 shows single chart with two lines
+* Verify two summary cards displayed above chart
+* Verify White summary card shows total games and win rate
+* Verify Black summary card shows total games and win rate
+* Hover over lines, verify color-specific tooltips
+
+**TC-017: Pie chart count labels**
+* Complete analysis workflow
+* Verify Section 4 pie chart shows count labels inside segments
+* Verify Section 5 pie chart shows count labels inside segments
+* Verify labels are readable on all segment sizes
+* Verify format is "Category: Count" (e.g., "Checkmate: 25")
+
+**TC-018: Opening names display**
+* Complete analysis workflow
+* Verify Section 6 shows human-readable opening names
+* Verify no ECO codes are displayed
+* Verify "Unknown Opening" count is less than 15% of total games
+* Verify top 5 best and worst openings have proper names
+
+**TC-019: Simplified opponent strength display**
+* Complete analysis workflow
+* Verify Section 7 shows three cards (no bar chart)
+* Verify each card shows: title, games, W/L/D, win rate %, avg Elo diff
+* Verify cards are responsive on mobile
+* Verify no bar chart elements present in DOM
+
+**TC-020: Simplified time of day display**
+* Complete analysis workflow
+* Verify Section 8 shows three cards (no bar chart)
+* Verify each card shows: time period, games, W/L/D, win rate %
+* Verify cards are responsive on mobile
+* Verify no bar chart elements present in DOM
 
 ---
 

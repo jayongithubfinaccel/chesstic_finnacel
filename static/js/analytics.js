@@ -5,6 +5,12 @@
 let charts = {};
 let analysisData = null;
 
+// Configure Chart.js defaults - disable datalabels plugin by default
+Chart.register(ChartDataLabels);
+Chart.defaults.set('plugins.datalabels', {
+    display: false  // Disable by default, enable only for specific charts
+});
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
     initializeDashboard();
@@ -251,7 +257,7 @@ function renderAnalysisHeader(data) {
         `${data.total_games} games analyzed`;
 }
 
-// Section 1: Overall Performance Over Time
+// Section 1: Overall Performance Over Time (Win Rate %)
 async function renderOverallPerformance(data) {
     if (!data || !data.daily_stats || data.daily_stats.length === 0) {
         return;
@@ -262,6 +268,12 @@ async function renderOverallPerformance(data) {
     const losses = data.daily_stats.map(d => d.losses);
     const draws = data.daily_stats.map(d => d.draws);
     
+    // Calculate win rate percentage for each day
+    const winRates = data.daily_stats.map(d => {
+        const total = d.wins + d.losses + d.draws;
+        return total > 0 ? ((d.wins / total) * 100).toFixed(1) : 0;
+    });
+    
     const ctx = document.getElementById('overallPerformanceChart');
     charts.overall = new Chart(ctx, {
         type: 'line',
@@ -269,28 +281,169 @@ async function renderOverallPerformance(data) {
             labels: dates,
             datasets: [
                 {
-                    label: 'Wins',
-                    data: wins,
-                    borderColor: '#27ae60',
-                    backgroundColor: 'rgba(39, 174, 96, 0.1)',
+                    label: 'Win Rate %',
+                    data: winRates,
+                    borderColor: '#3498db',
+                    backgroundColor: 'rgba(52, 152, 219, 0.1)',
                     tension: 0.3,
-                    fill: true
+                    fill: true,
+                    pointRadius: 4,
+                    pointHoverRadius: 6
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false
+            },
+            plugins: {
+                legend: {
+                    display: false
                 },
-                {
-                    label: 'Losses',
-                    data: losses,
-                    borderColor: '#e74c3c',
-                    backgroundColor: 'rgba(231, 76, 60, 0.1)',
-                    tension: 0.3,
-                    fill: true
+                tooltip: {
+                    callbacks: {
+                        title: (context) => formatDate(context[0].label),
+                        label: (context) => {
+                            const index = context.dataIndex;
+                            return [
+                                `Win Rate: ${context.parsed.y}%`,
+                                `Wins: ${wins[index]}`,
+                                `Losses: ${losses[index]}`,
+                                `Draws: ${draws[index]}`
+                            ];
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    title: {
+                        display: true,
+                        text: 'Win Rate %'
+                    },
+                    ticks: {
+                        callback: function(value) {
+                            return value + '%';
+                        }
+                    }
                 },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Date'
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Section 2: Color Performance (Unified Chart)
+async function renderColorPerformance(data) {
+    if (!data) return;
+    
+    // Render summary cards
+    if (data.white) {
+        renderColorSummary('whiteSummary', data.white, 'white');
+    }
+    if (data.black) {
+        renderColorSummary('blackSummary', data.black, 'black');
+    }
+    
+    // Render unified chart with both colors
+    if (data.white && data.black && data.white.daily_stats && data.black.daily_stats) {
+        renderUnifiedColorChart(data);
+    }
+}
+
+function renderColorSummary(elementId, colorData, color) {
+    const element = document.getElementById(elementId);
+    const winRate = colorData.win_rate || 0;
+    const total = (colorData.daily_stats || []).reduce((sum, d) => 
+        sum + d.wins + d.losses + d.draws, 0);
+    
+    const textColor = color === 'black' ? '#ffffff' : '#2c3e50';
+    
+    element.innerHTML = `
+        <div class="color-stat-item">
+            <span class="color-stat-label" style="color: ${textColor};">Total Games</span>
+            <span class="color-stat-value" style="color: ${textColor};">${total}</span>
+        </div>
+        <div class="color-stat-item">
+            <span class="color-stat-label" style="color: ${textColor};">Win Rate</span>
+            <span class="color-stat-value" style="color: ${color === 'white' ? '#27ae60' : '#2ecc71'};">${winRate.toFixed(1)}%</span>
+        </div>
+    `;
+}
+
+function renderUnifiedColorChart(data) {
+    // Get all unique dates from both colors
+    const whiteDates = data.white.daily_stats.map(d => d.date);
+    const blackDates = data.black.daily_stats.map(d => d.date);
+    const allDates = [...new Set([...whiteDates, ...blackDates])].sort();
+    
+    // Calculate win rates for each color by date
+    const whiteWinRates = allDates.map(date => {
+        const stat = data.white.daily_stats.find(d => d.date === date);
+        if (!stat) return null;
+        const total = stat.wins + stat.losses + stat.draws;
+        return total > 0 ? ((stat.wins / total) * 100).toFixed(1) : 0;
+    });
+    
+    const blackWinRates = allDates.map(date => {
+        const stat = data.black.daily_stats.find(d => d.date === date);
+        if (!stat) return null;
+        const total = stat.wins + stat.losses + stat.draws;
+        return total > 0 ? ((stat.wins / total) * 100).toFixed(1) : 0;
+    });
+    
+    // Store detailed data for tooltips
+    const whiteDetails = allDates.map(date => {
+        const stat = data.white.daily_stats.find(d => d.date === date);
+        return stat || { wins: 0, losses: 0, draws: 0 };
+    });
+    
+    const blackDetails = allDates.map(date => {
+        const stat = data.black.daily_stats.find(d => d.date === date);
+        return stat || { wins: 0, losses: 0, draws: 0 };
+    });
+    
+    const ctx = document.getElementById('colorPerformanceChart');
+    charts.colorPerformance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: allDates,
+            datasets: [
                 {
-                    label: 'Draws',
-                    data: draws,
+                    label: 'White Win Rate',
+                    data: whiteWinRates,
                     borderColor: '#95a5a6',
                     backgroundColor: 'rgba(149, 165, 166, 0.1)',
                     tension: 0.3,
-                    fill: true
+                    fill: false,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    pointBackgroundColor: '#ecf0f1',
+                    pointBorderColor: '#95a5a6',
+                    pointBorderWidth: 2
+                },
+                {
+                    label: 'Black Win Rate',
+                    data: blackWinRates,
+                    borderColor: '#34495e',
+                    backgroundColor: 'rgba(52, 73, 94, 0.1)',
+                    tension: 0.3,
+                    fill: false,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    pointBackgroundColor: '#2c3e50',
+                    pointBorderColor: '#34495e',
+                    pointBorderWidth: 2
                 }
             ]
         },
@@ -309,16 +462,34 @@ async function renderOverallPerformance(data) {
                 tooltip: {
                     callbacks: {
                         title: (context) => formatDate(context[0].label),
-                        label: (context) => `${context.dataset.label}: ${context.parsed.y} games`
+                        label: (context) => {
+                            const index = context.dataIndex;
+                            const isWhite = context.datasetIndex === 0;
+                            const details = isWhite ? whiteDetails[index] : blackDetails[index];
+                            const color = isWhite ? 'White' : 'Black';
+                            
+                            return [
+                                `${color} Win Rate: ${context.parsed.y}%`,
+                                `Wins: ${details.wins}`,
+                                `Losses: ${details.losses}`,
+                                `Draws: ${details.draws}`
+                            ];
+                        }
                     }
                 }
             },
             scales: {
                 y: {
                     beginAtZero: true,
+                    max: 100,
                     title: {
                         display: true,
-                        text: 'Number of Games'
+                        text: 'Win Rate %'
+                    },
+                    ticks: {
+                        callback: function(value) {
+                            return value + '%';
+                        }
                     }
                 },
                 x: {
@@ -330,92 +501,6 @@ async function renderOverallPerformance(data) {
             }
         }
     });
-}
-
-// Section 2: Color Performance
-async function renderColorPerformance(data) {
-    if (!data) return;
-    
-    // Render White performance
-    if (data.white && data.white.daily_stats) {
-        renderColorChart('whitePerformanceChart', data.white.daily_stats, 'White');
-        renderColorStats('whiteStats', data.white);
-    }
-    
-    // Render Black performance
-    if (data.black && data.black.daily_stats) {
-        renderColorChart('blackPerformanceChart', data.black.daily_stats, 'Black');
-        renderColorStats('blackStats', data.black);
-    }
-}
-
-function renderColorChart(canvasId, dailyStats, color) {
-    const dates = dailyStats.map(d => d.date);
-    const wins = dailyStats.map(d => d.wins);
-    const losses = dailyStats.map(d => d.losses);
-    const draws = dailyStats.map(d => d.draws);
-    
-    const ctx = document.getElementById(canvasId);
-    charts[canvasId] = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: dates,
-            datasets: [
-                {
-                    label: 'Wins',
-                    data: wins,
-                    backgroundColor: '#27ae60'
-                },
-                {
-                    label: 'Losses',
-                    data: losses,
-                    backgroundColor: '#e74c3c'
-                },
-                {
-                    label: 'Draws',
-                    data: draws,
-                    backgroundColor: '#95a5a6'
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    display: true,
-                    position: 'top'
-                }
-            },
-            scales: {
-                x: {
-                    stacked: true
-                },
-                y: {
-                    stacked: true,
-                    beginAtZero: true
-                }
-            }
-        }
-    });
-}
-
-function renderColorStats(elementId, colorData) {
-    const element = document.getElementById(elementId);
-    const winRate = colorData.win_rate || 0;
-    const total = (colorData.daily_stats || []).reduce((sum, d) => 
-        sum + d.wins + d.losses + d.draws, 0);
-    
-    element.innerHTML = `
-        <div class="stat-item">
-            <span class="stat-label">Win Rate</span>
-            <span class="stat-number" style="color: #27ae60;">${winRate.toFixed(1)}%</span>
-        </div>
-        <div class="stat-item">
-            <span class="stat-label">Total Games</span>
-            <span class="stat-number">${total}</span>
-        </div>
-    `;
 }
 
 // Section 3: Elo Progression
@@ -550,6 +635,25 @@ function renderTerminationChart(canvasId, data, type) {
                             return `${label}: ${value} (${percentage}%)`;
                         }
                     }
+                },
+                datalabels: {
+                    color: '#fff',
+                    font: {
+                        weight: 'bold',
+                        size: 14
+                    },
+                    formatter: (value, context) => {
+                        // Show label and count inside segment
+                        const label = context.chart.data.labels[context.dataIndex];
+                        return `${label}\n${value}`;
+                    },
+                    // Only show label if segment is large enough
+                    display: function(context) {
+                        const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                        const value = context.dataset.data[context.dataIndex];
+                        const percentage = (value / total) * 100;
+                        return percentage > 5; // Show label if > 5% of total
+                    }
                 }
             }
         }
@@ -665,13 +769,10 @@ function renderOpeningsTable(elementId, openings) {
 async function renderOpponentStrength(data) {
     if (!data) return;
     
-    // Render cards
+    // Render cards only (no bar chart per Milestone 7)
     if (data.lower_rated) renderStrengthCard('lowerRatedCard', data.lower_rated, 'lower');
     if (data.similar_rated) renderStrengthCard('similarRatedCard', data.similar_rated, 'similar');
     if (data.higher_rated) renderStrengthCard('higherRatedCard', data.higher_rated, 'higher');
-    
-    // Render chart
-    renderOpponentStrengthChart(data);
 }
 
 function renderStrengthCard(elementId, data, type) {
@@ -704,81 +805,17 @@ function renderStrengthCard(elementId, data, type) {
     `;
 }
 
-function renderOpponentStrengthChart(data) {
-    const ctx = document.getElementById('opponentStrengthChart');
-    
-    const categories = ['Lower Rated', 'Similar Rated', 'Higher Rated'];
-    const wins = [
-        data.lower_rated?.wins || 0,
-        data.similar_rated?.wins || 0,
-        data.higher_rated?.wins || 0
-    ];
-    const losses = [
-        data.lower_rated?.losses || 0,
-        data.similar_rated?.losses || 0,
-        data.higher_rated?.losses || 0
-    ];
-    const draws = [
-        data.lower_rated?.draws || 0,
-        data.similar_rated?.draws || 0,
-        data.higher_rated?.draws || 0
-    ];
-    
-    charts.opponentStrength = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: categories,
-            datasets: [
-                {
-                    label: 'Wins',
-                    data: wins,
-                    backgroundColor: '#27ae60'
-                },
-                {
-                    label: 'Losses',
-                    data: losses,
-                    backgroundColor: '#e74c3c'
-                },
-                {
-                    label: 'Draws',
-                    data: draws,
-                    backgroundColor: '#95a5a6'
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    display: true,
-                    position: 'top'
-                }
-            },
-            scales: {
-                x: {
-                    stacked: true
-                },
-                y: {
-                    stacked: true,
-                    beginAtZero: true
-                }
-            }
-        }
-    });
-}
+// Note: Bar chart removed for Section 7 per Milestone 7 requirements
+// Only card-based display is used
 
 // Section 8: Time of Day Performance
 async function renderTimeOfDay(data) {
     if (!data) return;
     
-    // Render cards
+    // Render cards only (no bar chart per Milestone 7)
     if (data.morning) renderTimeCard('morningCard', data.morning);
     if (data.afternoon) renderTimeCard('afternoonCard', data.afternoon);
     if (data.night) renderTimeCard('nightCard', data.night);
-    
-    // Render chart
-    renderTimeOfDayChart(data);
 }
 
 function renderTimeCard(elementId, data) {
@@ -811,69 +848,8 @@ function renderTimeCard(elementId, data) {
     `;
 }
 
-function renderTimeOfDayChart(data) {
-    const ctx = document.getElementById('timeOfDayChart');
-    
-    const periods = ['Morning', 'Afternoon', 'Night'];
-    const wins = [
-        data.morning?.wins || 0,
-        data.afternoon?.wins || 0,
-        data.night?.wins || 0
-    ];
-    const losses = [
-        data.morning?.losses || 0,
-        data.afternoon?.losses || 0,
-        data.night?.losses || 0
-    ];
-    const draws = [
-        data.morning?.draws || 0,
-        data.afternoon?.draws || 0,
-        data.night?.draws || 0
-    ];
-    
-    charts.timeOfDay = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: periods,
-            datasets: [
-                {
-                    label: 'Wins',
-                    data: wins,
-                    backgroundColor: '#27ae60'
-                },
-                {
-                    label: 'Losses',
-                    data: losses,
-                    backgroundColor: '#e74c3c'
-                },
-                {
-                    label: 'Draws',
-                    data: draws,
-                    backgroundColor: '#95a5a6'
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    display: true,
-                    position: 'top'
-                }
-            },
-            scales: {
-                x: {
-                    stacked: true
-                },
-                y: {
-                    stacked: true,
-                    beginAtZero: true
-                }
-            }
-        }
-    });
-}
+// Note: Bar chart removed for Section 8 per Milestone 7 requirements
+// Only card-based display is used
 
 // Utility Functions
 function destroyAllCharts() {

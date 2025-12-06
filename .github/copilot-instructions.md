@@ -4,12 +4,12 @@
 Flask-based chess analytics website that pulls data from Chess.com API. Users enter their Chess.com username and date period to analyze their game statistics.
 
 ## Your roles
-- If you do some bugfix, write the summary and fix docum it into `docs/bug_fixes.md`.
-- When working on milestone, write the progress to `docs/milestone_progress.md`.
-- Write every changes summary and line changes to `docs/documentation.md`.
-- Read the progress documentation from `docs/milestone_progress.md` and `docs/documentation.md` 
-first to understand context.
-- All product requirements documents are stored in `.github/docs/prd_[project_name].md`.
+- Every project can be found in `.github/docs/[project_name]/`
+- If you do some bugfix, write the summary and fix docum it into `.github/docs/[project_name]/bug_fixes.md`.
+- When working on milestone, write the progress to `.github/docs/[project_name]/milestone_progress.md`.
+- Write every changes summary and line changes to `.github/docs/[project_name]/documentation.md`.
+- Read the progress documentation from `.github/docs/[project_name]/milestone_progress.md` first to understand context (if any).
+- All product requirements documents are stored in `.github/docs/[project_name]/prd_[project_name].md`.
 
 
 ## Technology Stack
@@ -27,9 +27,6 @@ first to understand context.
 - Secrets will be saved in .env on local machine, do not push .env to github
 
 
-
-
-
 ## Project Structure
 - `app/` - Flask application code
   - `routes/` - API and view routes
@@ -40,7 +37,11 @@ first to understand context.
 - `templates/` - HTML templates
 - `tests/` - Test files including Playwright tests
 - `.github/agents/` - AI agent configurations
-- `.github/docs/` - prd_[project_name].md created from prd-agent.md
+- `.github/docs/[project_name]` - prd_[project_name].md` created from prd-agent.md
+- `.github/docs/[project_name]/milestone_progress.md` and per-milestone progress files
+- `.github/docs/[project_name]/bug_fixes.md/` - bug_fixes.md created from bugfixes done
+- `.github/docs/[project_name]/documentation.md` - documentation of all changes made
+
 
 ## Development Guidelines
 
