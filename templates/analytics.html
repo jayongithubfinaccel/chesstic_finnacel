@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Analytics Dashboard - Chess Analytics</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
     <nav class="navbar">
@@ -19,25 +20,304 @@
         </div>
     </nav>
 
-    <main class="container">
-        <section class="hero">
-            <h2>Analytics Dashboard</h2>
-            <p>Detailed analysis coming soon!</p>
-        </section>
+    <main class="dashboard-container">
+        <!-- Input Section -->
+        <section class="dashboard-input-section">
+            <div class="input-card">
+                <h2>Comprehensive Chess Analytics</h2>
+                <p class="subtitle">Get detailed insights into your Chess.com performance</p>
+                
+                <form id="analyticsForm" class="analytics-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="username">Chess.com Username</label>
+                            <input 
+                                type="text" 
+                                id="username" 
+                                name="username" 
+                                placeholder="e.g., jay_fh"
+                                required
+                                pattern="[a-zA-Z0-9_-]{3,25}"
+                                title="Username must be 3-25 characters"
+                            >
+                        </div>
+                    </div>
 
-        <section class="info-section">
-            <div class="info-card">
-                <h3>📊 Coming Soon</h3>
-                <p>We're working on advanced analytics features including:</p>
-                <ul>
-                    <li>Opening repertoire analysis</li>
-                    <li>Performance trends over time</li>
-                    <li>Rating progression charts</li>
-                    <li>Opponent strength analysis</li>
-                    <li>Time management insights</li>
-                </ul>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="startDate">Start Date</label>
+                            <input 
+                                type="date" 
+                                id="startDate" 
+                                name="startDate" 
+                                required
+                            >
+                        </div>
+
+                        <div class="form-group">
+                            <label for="endDate">End Date</label>
+                            <input 
+                                type="date" 
+                                id="endDate" 
+                                name="endDate" 
+                                required
+                            >
+                        </div>
+
+                        <div class="form-group">
+                            <label for="timezone">Timezone</label>
+                            <select id="timezone" name="timezone">
+                                <option value="auto">Auto-detect</option>
+                                <option value="UTC">UTC</option>
+                                <option value="America/New_York">America/New_York (EST)</option>
+                                <option value="America/Chicago">America/Chicago (CST)</option>
+                                <option value="America/Denver">America/Denver (MST)</option>
+                                <option value="America/Los_Angeles">America/Los_Angeles (PST)</option>
+                                <option value="Europe/London">Europe/London (GMT)</option>
+                                <option value="Europe/Paris">Europe/Paris (CET)</option>
+                                <option value="Asia/Tokyo">Asia/Tokyo (JST)</option>
+                                <option value="Asia/Shanghai">Asia/Shanghai (CST)</option>
+                                <option value="Australia/Sydney">Australia/Sydney (AEST)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="date-presets">
+                        <label>Quick Presets:</label>
+                        <button type="button" class="btn-preset" data-days="7">Last 7 Days</button>
+                        <button type="button" class="btn-preset" data-days="30">Last 30 Days</button>
+                        <button type="button" class="btn-preset" data-days="90">Last 3 Months</button>
+                        <button type="button" class="btn-preset" data-days="180">Last 6 Months</button>
+                    </div>
+
+                    <button type="submit" class="btn-analyze" id="analyzeBtn">
+                        <span class="btn-text">Analyze Performance</span>
+                        <span class="btn-icon">📊</span>
+                    </button>
+                </form>
+
+                <div id="error" class="error-message hidden"></div>
             </div>
         </section>
+
+        <!-- Loading State -->
+        <div id="loadingState" class="loading-state hidden">
+            <div class="loading-card">
+                <div class="spinner"></div>
+                <h3>Analyzing Your Games</h3>
+                <p id="loadingMessage">Fetching game data from Chess.com...</p>
+                <div class="loading-progress">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <p class="progress-text" id="progressText">0%</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Empty State -->
+        <div id="emptyState" class="empty-state">
+            <div class="empty-card">
+                <div class="empty-icon">📊</div>
+                <h3>Ready to Analyze</h3>
+                <p>Enter your Chess.com username and date range above to get comprehensive analytics</p>
+                <div class="features-list">
+                    <div class="feature-item">✓ Performance trends over time</div>
+                    <div class="feature-item">✓ Win/loss/draw analysis by color</div>
+                    <div class="feature-item">✓ Elo rating progression</div>
+                    <div class="feature-item">✓ Opening repertoire insights</div>
+                    <div class="feature-item">✓ Opponent strength analysis</div>
+                    <div class="feature-item">✓ Time of day performance</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dashboard Results -->
+        <div id="dashboardResults" class="dashboard-results hidden">
+            <!-- Analysis Header Card -->
+            <section class="analysis-header">
+                <div class="header-card">
+                    <div class="header-main">
+                        <h2 id="analysisTitle">Analysis for <span id="displayUsername"></span></h2>
+                        <div class="header-meta">
+                            <span id="displayPeriod"></span>
+                            <span class="separator">•</span>
+                            <span id="displayTimezone"></span>
+                            <span class="separator">•</span>
+                            <span id="displayTotalGames"></span>
+                        </div>
+                    </div>
+                    <button id="exportBtn" class="btn-export" title="Export Analysis (Coming Soon)">
+                        <span>Export</span>
+                    </button>
+                </div>
+            </section>
+
+            <!-- Section 1: Overall Performance Over Time -->
+            <section class="analytics-section">
+                <div class="section-card">
+                    <div class="section-header">
+                        <h3>📈 Overall Performance Over Time</h3>
+                        <p class="section-description">Track your win/loss/draw trends over the analysis period</p>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="overallPerformanceChart"></canvas>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Section 2: Color Performance -->
+            <section class="analytics-section">
+                <div class="section-grid-2">
+                    <div class="section-card">
+                        <div class="section-header">
+                            <h3>⚪ White Performance</h3>
+                            <p class="section-description">Your performance as White pieces</p>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="whitePerformanceChart"></canvas>
+                        </div>
+                        <div class="stats-summary" id="whiteStats"></div>
+                    </div>
+                    <div class="section-card">
+                        <div class="section-header">
+                            <h3>⚫ Black Performance</h3>
+                            <p class="section-description">Your performance as Black pieces</p>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="blackPerformanceChart"></canvas>
+                        </div>
+                        <div class="stats-summary" id="blackStats"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Section 3: Elo Rating Progression -->
+            <section class="analytics-section">
+                <div class="section-card">
+                    <div class="section-header">
+                        <h3>📊 Elo Rating Progression</h3>
+                        <p class="section-description">Track your rating changes over time</p>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="eloProgressionChart"></canvas>
+                    </div>
+                    <div class="stats-summary" id="eloStats"></div>
+                </div>
+            </section>
+
+            <!-- Section 4 & 5: Termination Types -->
+            <section class="analytics-section">
+                <div class="section-grid-2">
+                    <div class="section-card">
+                        <div class="section-header">
+                            <h3>✅ How You Win</h3>
+                            <p class="section-description">Distribution of your winning game terminations</p>
+                        </div>
+                        <div class="chart-container chart-doughnut">
+                            <canvas id="terminationWinsChart"></canvas>
+                        </div>
+                        <div class="termination-legend" id="terminationWinsLegend"></div>
+                    </div>
+                    <div class="section-card">
+                        <div class="section-header">
+                            <h3>❌ How You Lose</h3>
+                            <p class="section-description">Distribution of your losing game terminations</p>
+                        </div>
+                        <div class="chart-container chart-doughnut">
+                            <canvas id="terminationLossesChart"></canvas>
+                        </div>
+                        <div class="termination-legend" id="terminationLossesLegend"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Section 6: Opening Performance -->
+            <section class="analytics-section">
+                <div class="section-card">
+                    <div class="section-header">
+                        <h3>♟️ Opening Performance</h3>
+                        <p class="section-description">Your strongest and weakest openings</p>
+                    </div>
+                    <div class="opening-content">
+                        <div class="opening-section">
+                            <h4 class="opening-subtitle">🏆 Top 5 Best Openings</h4>
+                            <div class="chart-container">
+                                <canvas id="bestOpeningsChart"></canvas>
+                            </div>
+                            <div class="opening-table" id="bestOpeningsTable"></div>
+                        </div>
+                        <div class="opening-section">
+                            <h4 class="opening-subtitle">⚠️ Top 5 Worst Openings</h4>
+                            <div class="chart-container">
+                                <canvas id="worstOpeningsChart"></canvas>
+                            </div>
+                            <div class="opening-table" id="worstOpeningsTable"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Section 7: Opponent Strength Analysis -->
+            <section class="analytics-section">
+                <div class="section-card">
+                    <div class="section-header">
+                        <h3>🎯 Opponent Strength Analysis</h3>
+                        <p class="section-description">Performance against different rating levels</p>
+                    </div>
+                    <div class="strength-grid">
+                        <div class="strength-card" id="lowerRatedCard">
+                            <h4>Lower Rated</h4>
+                            <p class="strength-subtitle">Opponents 100+ below your rating</p>
+                            <div class="strength-stats"></div>
+                        </div>
+                        <div class="strength-card" id="similarRatedCard">
+                            <h4>Similar Rated</h4>
+                            <p class="strength-subtitle">Opponents within ±100 rating</p>
+                            <div class="strength-stats"></div>
+                        </div>
+                        <div class="strength-card" id="higherRatedCard">
+                            <h4>Higher Rated</h4>
+                            <p class="strength-subtitle">Opponents 100+ above your rating</p>
+                            <div class="strength-stats"></div>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="opponentStrengthChart"></canvas>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Section 8: Time of Day Performance -->
+            <section class="analytics-section">
+                <div class="section-card">
+                    <div class="section-header">
+                        <h3>🕐 Time of Day Performance</h3>
+                        <p class="section-description">When you play your best chess</p>
+                    </div>
+                    <div class="time-grid">
+                        <div class="time-card" id="morningCard">
+                            <h4>🌅 Morning</h4>
+                            <p class="time-subtitle">6:00 AM - 2:00 PM</p>
+                            <div class="time-stats"></div>
+                        </div>
+                        <div class="time-card" id="afternoonCard">
+                            <h4>☀️ Afternoon</h4>
+                            <p class="time-subtitle">2:00 PM - 10:00 PM</p>
+                            <div class="time-stats"></div>
+                        </div>
+                        <div class="time-card" id="nightCard">
+                            <h4>🌙 Night</h4>
+                            <p class="time-subtitle">10:00 PM - 6:00 AM</p>
+                            <div class="time-stats"></div>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="timeOfDayChart"></canvas>
+                    </div>
+                </div>
+            </section>
+        </div>
     </main>
 
     <footer class="footer">
@@ -45,5 +325,7 @@
             <p>&copy; 2024 Chess Analytics. Data from Chess.com API.</p>
         </div>
     </footer>
+
+    <script src="{{ url_for('static', filename='js/analytics.js') }}"></script>
 </body>
 </html>
