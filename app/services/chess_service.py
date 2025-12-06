@@ -52,7 +52,7 @@ class ChessService:
     
     def get_games_by_month(self, username: str, year: int, month: int) -> List[Dict]:
         """
-        Fetch games for a specific month.
+        Fetch games for a specific month with complete PGN data.
         
         Args:
             username: Chess.com username
@@ -60,13 +60,23 @@ class ChessService:
             month: Month (1-12)
             
         Returns:
-            List of games
+            List of games with PGN data
         """
         url = f"{self.BASE_URL}/player/{username}/games/{year}/{month:02d}"
         response = self.session.get(url)
         response.raise_for_status()
         data = response.json()
-        return data.get('games', [])
+        games = data.get('games', [])
+        
+        # Games from Chess.com API should already include PGN
+        # Ensure each game has necessary fields
+        for game in games:
+            if 'pgn' not in game:
+                game['pgn'] = ''
+            if 'end_time' not in game:
+                game['end_time'] = 0
+                
+        return games
     
     def analyze_games(self, username: str, start_date: str, end_date: str) -> Dict:
         """

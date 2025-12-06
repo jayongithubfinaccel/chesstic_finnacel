@@ -1,0 +1,502 @@
+"""
+Analytics service for comprehensive chess game analysis.
+"""
+from datetime import datetime
+from typing import Dict, List, Optional
+from collections import defaultdict
+import chess.pgn
+from io import StringIO
+
+from app.utils.timezone_utils import (
+    convert_utc_to_timezone, 
+    get_time_of_day_category,
+    get_date_string
+)
+
+
+class AnalyticsService:
+    """Service for advanced chess analytics calculations."""
+    
+    def __init__(self):
+        """Initialize analytics service."""
+        pass
+    
+    def analyze_detailed(
+        self, 
+        games: List[Dict], 
+        username: str, 
+        timezone: str = 'UTC'
+    ) -> Dict:
+        """
+        Perform comprehensive analysis on games.
+        
+        Args:
+            games: List of game dictionaries from Chess.com API
+            username: Player's Chess.com username
+            timezone: User's timezone string
+            
+        Returns:
+            Comprehensive analysis results for all 8 sections
+        """
+        if not games:
+            return self._empty_analysis()
+        
+        # Analyze all games
+        analyzed_games = self._parse_and_enrich_games(games, username, timezone)
+        
+        return {
+            'total_games': len(analyzed_games),
+            'sections': {
+                'overall_performance': self._analyze_overall_performance(analyzed_games),
+                'color_performance': self._analyze_color_performance(analyzed_games),
+                'elo_progression': self._analyze_elo_progression(analyzed_games),
+                'termination_wins': self._analyze_termination_wins(analyzed_games),
+                'termination_losses': self._analyze_termination_losses(analyzed_games),
+                'opening_performance': self._analyze_opening_performance(analyzed_games),
+                'opponent_strength': self._analyze_opponent_strength(analyzed_games),
+                'time_of_day': self._analyze_time_of_day(analyzed_games)
+            }
+        }
+    
+    def _parse_and_enrich_games(
+        self, 
+        games: List[Dict], 
+        username: str, 
+        timezone: str
+    ) -> List[Dict]:
+        """
+        Parse and enrich game data with additional information.
+        
+        Args:
+            games: Raw game data from Chess.com API
+            username: Player's username
+            timezone: User's timezone
+            
+        Returns:
+            List of enriched game dictionaries
+        """
+        enriched = []
+        username_lower = username.lower()
+        
+        for game in games:
+            white = game.get('white', {})
+            black = game.get('black', {})
+            
+            # Determine player's color and opponent
+            if white.get('username', '').lower() == username_lower:
+                player_color = 'white'
+                player_data = white
+                opponent_data = black
+            else:
+                player_color = 'black'
+                player_data = black
+                opponent_data = white
+            
+            # Get result
+            result = player_data.get('result', '')
+            
+            # Convert timestamp to user's timezone
+            end_time = game.get('end_time', 0)
+            local_time = convert_utc_to_timezone(end_time, timezone)
+            
+            # Extract opening name from PGN
+            opening_name = self._extract_opening_name(game.get('pgn', ''))
+            
+            # Extract termination type
+            termination = self._extract_termination(game)
+            
+            enriched.append({
+                'pgn': game.get('pgn', ''),
+                'end_time': end_time,
+                'local_time': local_time,
+                'date': get_date_string(local_time),
+                'time_of_day': get_time_of_day_category(local_time),
+                'player_color': player_color,
+                'result': result,
+                'player_rating': player_data.get('rating', 0),
+                'opponent_rating': opponent_data.get('rating', 0),
+                'opponent_username': opponent_data.get('username', 'Unknown'),
+                'time_control': game.get('time_control', 'unknown'),
+                'time_class': game.get('time_class', 'unknown'),
+                'opening_name': opening_name,
+                'termination': termination,
+                'url': game.get('url', '')
+            })
+        
+        # Sort by date
+        enriched.sort(key=lambda x: x['end_time'])
+        
+        return enriched
+    
+    def _extract_opening_name(self, pgn_string: str) -> str:
+        """
+        Extract opening name from PGN.
+        
+        Args:
+            pgn_string: PGN string from game data
+            
+        Returns:
+            Opening name or 'Unknown'
+        """
+        if not pgn_string:
+            return 'Unknown'
+        
+        try:
+            pgn = StringIO(pgn_string)
+            game = chess.pgn.read_game(pgn)
+            
+            if game is None:
+                return 'Unknown'
+            
+            # Try to get ECO from headers first
+            eco = game.headers.get('ECO', '')
+            opening_name = game.headers.get('Opening', '')
+            
+            if opening_name:
+                # Remove ECO code if it's at the start
+                if opening_name.startswith(eco) and eco:
+                    opening_name = opening_name[len(eco):].strip()
+                    opening_name = opening_name.lstrip(':').strip()
+                return opening_name
+            
+            # Fallback: try to identify from moves (first 5-10 moves)
+            board = game.board()
+            moves = []
+            for move in list(game.mainline_moves())[:10]:
+                moves.append(board.san(move))
+                board.push(move)
+            
+            # Use ECO code if available, otherwise return "Unknown"
+            if eco:
+                return f"Opening ({eco})"
+            
+            return 'Unknown'
+            
+        except Exception:
+            return 'Unknown'
+    
+    def _extract_termination(self, game: Dict) -> str:
+        """
+        Extract termination type from game data.
+        
+        Args:
+            game: Game dictionary
+            
+        Returns:
+            Termination type: 'checkmate', 'timeout', 'resignation', 'abandoned', 'agreed', 'repetition', 'insufficient', 'stalemate', 'other'
+        """
+        # Try to parse from PGN
+        pgn_string = game.get('pgn', '')
+        if pgn_string:
+            try:
+                pgn = StringIO(pgn_string)
+                game_obj = chess.pgn.read_game(pgn)
+                if game_obj:
+                    termination = game_obj.headers.get('Termination', '').lower()
+                    
+                    if 'checkmate' in termination or 'won by checkmate' in termination:
+                        return 'checkmate'
+                    elif 'time' in termination or 'timeout' in termination:
+                        return 'timeout'
+                    elif 'resignation' in termination or 'resigned' in termination:
+                        return 'resignation'
+                    elif 'abandoned' in termination:
+                        return 'abandoned'
+                    elif 'agreement' in termination or 'agreed' in termination:
+                        return 'agreed'
+                    elif 'repetition' in termination:
+                        return 'repetition'
+                    elif 'insufficient' in termination:
+                        return 'insufficient'
+                    elif 'stalemate' in termination:
+                        return 'stalemate'
+            except Exception:
+                pass
+        
+        return 'other'
+    
+    def _analyze_overall_performance(self, games: List[Dict]) -> Dict:
+        """
+        Analyze overall win/loss/draw performance over time.
+        
+        Returns daily aggregated statistics.
+        """
+        daily_stats = defaultdict(lambda: {'wins': 0, 'losses': 0, 'draws': 0})
+        
+        for game in games:
+            date = game['date']
+            result = game['result']
+            
+            if result == 'win':
+                daily_stats[date]['wins'] += 1
+            elif result in ['checkmated', 'timeout', 'resigned', 'lose', 'abandoned']:
+                daily_stats[date]['losses'] += 1
+            else:
+                daily_stats[date]['draws'] += 1
+        
+        # Convert to list format
+        daily_list = []
+        for date in sorted(daily_stats.keys()):
+            stats = daily_stats[date]
+            daily_list.append({
+                'date': date,
+                'wins': stats['wins'],
+                'losses': stats['losses'],
+                'draws': stats['draws']
+            })
+        
+        return {'daily_stats': daily_list}
+    
+    def _analyze_color_performance(self, games: List[Dict]) -> Dict:
+        """Analyze performance by color (white vs black)."""
+        white_daily = defaultdict(lambda: {'wins': 0, 'losses': 0, 'draws': 0})
+        black_daily = defaultdict(lambda: {'wins': 0, 'losses': 0, 'draws': 0})
+        
+        white_total = {'wins': 0, 'losses': 0, 'draws': 0}
+        black_total = {'wins': 0, 'losses': 0, 'draws': 0}
+        
+        for game in games:
+            date = game['date']
+            result = game['result']
+            color = game['player_color']
+            
+            daily_dict = white_daily if color == 'white' else black_daily
+            total_dict = white_total if color == 'white' else black_total
+            
+            if result == 'win':
+                daily_dict[date]['wins'] += 1
+                total_dict['wins'] += 1
+            elif result in ['checkmated', 'timeout', 'resigned', 'lose', 'abandoned']:
+                daily_dict[date]['losses'] += 1
+                total_dict['losses'] += 1
+            else:
+                daily_dict[date]['draws'] += 1
+                total_dict['draws'] += 1
+        
+        # Calculate win rates
+        white_games = sum(white_total.values())
+        black_games = sum(black_total.values())
+        
+        white_win_rate = (white_total['wins'] / white_games * 100) if white_games > 0 else 0
+        black_win_rate = (black_total['wins'] / black_games * 100) if black_games > 0 else 0
+        
+        return {
+            'white': {
+                'daily_stats': [{'date': d, **white_daily[d]} for d in sorted(white_daily.keys())],
+                'win_rate': round(white_win_rate, 2),
+                'total': white_total
+            },
+            'black': {
+                'daily_stats': [{'date': d, **black_daily[d]} for d in sorted(black_daily.keys())],
+                'win_rate': round(black_win_rate, 2),
+                'total': black_total
+            }
+        }
+    
+    def _analyze_elo_progression(self, games: List[Dict]) -> Dict:
+        """Analyze Elo rating progression over time."""
+        data_points = []
+        
+        for game in games:
+            data_points.append({
+                'date': game['date'],
+                'rating': game['player_rating']
+            })
+        
+        # Calculate rating change
+        rating_change = 0
+        if len(data_points) >= 2:
+            rating_change = data_points[-1]['rating'] - data_points[0]['rating']
+        
+        return {
+            'data_points': data_points,
+            'rating_change': rating_change
+        }
+    
+    def _analyze_termination_wins(self, games: List[Dict]) -> Dict:
+        """Analyze how player wins games."""
+        termination_counts = defaultdict(int)
+        total_wins = 0
+        
+        for game in games:
+            if game['result'] == 'win':
+                termination_counts[game['termination']] += 1
+                total_wins += 1
+        
+        # Calculate percentages
+        result = {}
+        for termination, count in termination_counts.items():
+            percentage = (count / total_wins * 100) if total_wins > 0 else 0
+            result[termination] = {
+                'count': count,
+                'percentage': round(percentage, 2)
+            }
+        
+        return result
+    
+    def _analyze_termination_losses(self, games: List[Dict]) -> Dict:
+        """Analyze how player loses games."""
+        termination_counts = defaultdict(int)
+        total_losses = 0
+        
+        for game in games:
+            if game['result'] in ['checkmated', 'timeout', 'resigned', 'lose', 'abandoned']:
+                termination_counts[game['termination']] += 1
+                total_losses += 1
+        
+        # Calculate percentages
+        result = {}
+        for termination, count in termination_counts.items():
+            percentage = (count / total_losses * 100) if total_losses > 0 else 0
+            result[termination] = {
+                'count': count,
+                'percentage': round(percentage, 2)
+            }
+        
+        return result
+    
+    def _analyze_opening_performance(self, games: List[Dict]) -> Dict:
+        """Analyze performance by chess opening."""
+        opening_stats = defaultdict(lambda: {'wins': 0, 'losses': 0, 'draws': 0, 'games': 0})
+        
+        for game in games:
+            opening = game['opening_name']
+            if opening == 'Unknown':
+                continue
+            
+            result = game['result']
+            opening_stats[opening]['games'] += 1
+            
+            if result == 'win':
+                opening_stats[opening]['wins'] += 1
+            elif result in ['checkmated', 'timeout', 'resigned', 'lose', 'abandoned']:
+                opening_stats[opening]['losses'] += 1
+            else:
+                opening_stats[opening]['draws'] += 1
+        
+        # Filter openings with 3+ games and calculate win rates
+        qualified_openings = []
+        for opening, stats in opening_stats.items():
+            if stats['games'] >= 3:
+                total = stats['games']
+                win_rate = (stats['wins'] / total * 100) if total > 0 else 0
+                qualified_openings.append({
+                    'name': opening,
+                    'games': stats['games'],
+                    'wins': stats['wins'],
+                    'losses': stats['losses'],
+                    'draws': stats['draws'],
+                    'win_rate': round(win_rate, 2)
+                })
+        
+        # Sort by win rate
+        qualified_openings.sort(key=lambda x: x['win_rate'], reverse=True)
+        
+        # Get top 5 and bottom 5
+        best_openings = qualified_openings[:5]
+        worst_openings = qualified_openings[-5:][::-1]  # Reverse to show worst first
+        
+        return {
+            'best_openings': best_openings,
+            'worst_openings': worst_openings
+        }
+    
+    def _analyze_opponent_strength(self, games: List[Dict]) -> Dict:
+        """Analyze performance against opponents of different strengths."""
+        categories = {
+            'lower_rated': {'wins': 0, 'losses': 0, 'draws': 0, 'games': 0},
+            'similar_rated': {'wins': 0, 'losses': 0, 'draws': 0, 'games': 0},
+            'higher_rated': {'wins': 0, 'losses': 0, 'draws': 0, 'games': 0}
+        }
+        
+        for game in games:
+            player_rating = game['player_rating']
+            opponent_rating = game['opponent_rating']
+            
+            if not player_rating or not opponent_rating:
+                continue
+            
+            # Calculate Elo differential
+            elo_diff = opponent_rating - player_rating
+            
+            # Categorize
+            if elo_diff < -100:
+                category = 'lower_rated'
+            elif -100 <= elo_diff <= 100:
+                category = 'similar_rated'
+            else:
+                category = 'higher_rated'
+            
+            result = game['result']
+            categories[category]['games'] += 1
+            
+            if result == 'win':
+                categories[category]['wins'] += 1
+            elif result in ['checkmated', 'timeout', 'resigned', 'lose', 'abandoned']:
+                categories[category]['losses'] += 1
+            else:
+                categories[category]['draws'] += 1
+        
+        # Calculate win rates
+        for category in categories.values():
+            total = category['games']
+            win_rate = (category['wins'] / total * 100) if total > 0 else 0
+            category['win_rate'] = round(win_rate, 2)
+        
+        return categories
+    
+    def _analyze_time_of_day(self, games: List[Dict]) -> Dict:
+        """Analyze performance by time of day."""
+        periods = {
+            'morning': {'wins': 0, 'losses': 0, 'draws': 0, 'games': 0},
+            'afternoon': {'wins': 0, 'losses': 0, 'draws': 0, 'games': 0},
+            'night': {'wins': 0, 'losses': 0, 'draws': 0, 'games': 0}
+        }
+        
+        for game in games:
+            period = game['time_of_day']
+            result = game['result']
+            
+            periods[period]['games'] += 1
+            
+            if result == 'win':
+                periods[period]['wins'] += 1
+            elif result in ['checkmated', 'timeout', 'resigned', 'lose', 'abandoned']:
+                periods[period]['losses'] += 1
+            else:
+                periods[period]['draws'] += 1
+        
+        # Calculate win rates
+        for period in periods.values():
+            total = period['games']
+            win_rate = (period['wins'] / total * 100) if total > 0 else 0
+            period['win_rate'] = round(win_rate, 2)
+        
+        return periods
+    
+    def _empty_analysis(self) -> Dict:
+        """Return empty analysis structure."""
+        return {
+            'total_games': 0,
+            'sections': {
+                'overall_performance': {'daily_stats': []},
+                'color_performance': {
+                    'white': {'daily_stats': [], 'win_rate': 0, 'total': {'wins': 0, 'losses': 0, 'draws': 0}},
+                    'black': {'daily_stats': [], 'win_rate': 0, 'total': {'wins': 0, 'losses': 0, 'draws': 0}}
+                },
+                'elo_progression': {'data_points': [], 'rating_change': 0},
+                'termination_wins': {},
+                'termination_losses': {},
+                'opening_performance': {'best_openings': [], 'worst_openings': []},
+                'opponent_strength': {
+                    'lower_rated': {'wins': 0, 'losses': 0, 'draws': 0, 'games': 0, 'win_rate': 0},
+                    'similar_rated': {'wins': 0, 'losses': 0, 'draws': 0, 'games': 0, 'win_rate': 0},
+                    'higher_rated': {'wins': 0, 'losses': 0, 'draws': 0, 'games': 0, 'win_rate': 0}
+                },
+                'time_of_day': {
+                    'morning': {'wins': 0, 'losses': 0, 'draws': 0, 'games': 0, 'win_rate': 0},
+                    'afternoon': {'wins': 0, 'losses': 0, 'draws': 0, 'games': 0, 'win_rate': 0},
+                    'night': {'wins': 0, 'losses': 0, 'draws': 0, 'games': 0, 'win_rate': 0}
+                }
+            }
+        }

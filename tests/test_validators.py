@@ -2,7 +2,8 @@
 Unit tests for validators module.
 """
 import pytest
-from app.utils.validators import validate_username, validate_date_range
+from datetime import datetime, timedelta
+from app.utils.validators import validate_username, validate_date_range, validate_timezone
 
 
 class TestValidateUsername:
@@ -67,3 +68,35 @@ class TestValidateDateRange:
         """Test empty dates."""
         assert not validate_date_range('', '2024-01-31')
         assert not validate_date_range('2024-01-01', '')
+    
+    def test_invalid_date_range_too_long(self):
+        """Test date range longer than 1 year."""
+        start = datetime.now() - timedelta(days=400)
+        end = datetime.now() - timedelta(days=1)
+        assert not validate_date_range(start.strftime('%Y-%m-%d'), end.strftime('%Y-%m-%d'))
+
+
+class TestValidateTimezone:
+    """Test cases for timezone validation."""
+    
+    def test_valid_timezones(self):
+        """Test valid timezone strings."""
+        assert validate_timezone('UTC')
+        assert validate_timezone('America/New_York')
+        assert validate_timezone('Europe/London')
+        assert validate_timezone('Asia/Tokyo')
+        assert validate_timezone('Australia/Sydney')
+    
+    def test_invalid_timezone(self):
+        """Test invalid timezone strings."""
+        assert not validate_timezone('Invalid/Timezone')
+        assert not validate_timezone('Not_A_Timezone')
+        assert not validate_timezone('America/InvalidCity')
+    
+    def test_invalid_timezone_none(self):
+        """Test None timezone."""
+        assert not validate_timezone(None)
+    
+    def test_invalid_timezone_empty(self):
+        """Test empty timezone."""
+        assert not validate_timezone('')

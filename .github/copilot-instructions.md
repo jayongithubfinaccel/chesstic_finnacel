@@ -3,6 +3,15 @@
 ## Project Overview
 Flask-based chess analytics website that pulls data from Chess.com API. Users enter their Chess.com username and date period to analyze their game statistics.
 
+## Your roles
+- If you do some bugfix, write the summary and fix docum it into `docs/bug_fixes.md`.
+- When working on milestone, write the progress to `docs/milestone_progress.md`.
+- Write every changes summary and line changes to `docs/documentation.md`.
+- Read the progress documentation from `docs/milestone_progress.md` and `docs/documentation.md` 
+first to understand context.
+- All product requirements documents are stored in `.github/docs/prd_[project_name].md`.
+
+
 ## Technology Stack
 - **Backend**: Flask (Python)
 - **Frontend**: HTML5, CSS3, JavaScript (vanilla)
@@ -31,6 +40,7 @@ Flask-based chess analytics website that pulls data from Chess.com API. Users en
 - `templates/` - HTML templates
 - `tests/` - Test files including Playwright tests
 - `.github/agents/` - AI agent configurations
+- `.github/docs/` - prd_[project_name].md created from prd-agent.md
 
 ## Development Guidelines
 

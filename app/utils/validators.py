@@ -2,8 +2,9 @@
 Input validation utilities.
 """
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
+import pytz
 
 
 def validate_username(username: Optional[str]) -> bool:
@@ -50,7 +51,31 @@ def validate_date_range(start_date: Optional[str], end_date: Optional[str]) -> b
         if end > datetime.now():
             return False
         
+        # Ensure date range is not more than 1 year
+        if (end - start).days > 365:
+            return False
+        
         return True
         
     except ValueError:
+        return False
+
+
+def validate_timezone(timezone_str: Optional[str]) -> bool:
+    """
+    Validate timezone string.
+    
+    Args:
+        timezone_str: Timezone string to validate (e.g., 'America/New_York')
+        
+    Returns:
+        True if valid, False otherwise
+    """
+    if not timezone_str:
+        return False
+    
+    try:
+        pytz.timezone(timezone_str)
+        return True
+    except pytz.exceptions.UnknownTimeZoneError:
         return False
