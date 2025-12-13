@@ -674,6 +674,645 @@ def identify_opening(pgn_string):
 
 ---
 
+## Milestone 8: Game stage mistake analysis
+
+**Status:** 🔄 In Progress  
+**Start Date:** December 12, 2025
+
+### Overview
+
+This milestone introduces comprehensive mistake analysis across different game stages (early, middle, endgame) using chess engine evaluation. The system will analyze each move using Stockfish engine to identify mistakes, blunders, and inaccuracies, categorize them by game stage, and present insights to help players understand where they struggle most.
+
+### Section 9: Mistake analysis by game stage
+
+**Requirement ID:** EA-018
+
+**User story:** As a chess player, I want to know in which stage of the game I make the most mistakes so I can focus my training on improving specific phases of play.
+
+**Game stage definitions:**
+* **Early game:** Moves 1-7 (opening phase)
+* **Middle game:** Moves 8-20 (middlegame tactics and strategy)
+* **Endgame:** Moves 21+ (endgame technique)
+
+**Mistake classification:**
+* **Inaccuracy:** Evaluation drop of 50-100 centipawns (0.5-1.0 pawns)
+* **Mistake:** Evaluation drop of 100-200 centipawns (1.0-2.0 pawns)
+* **Blunder:** Evaluation drop of 200+ centipawns (2.0+ pawns)
+* **Missed opportunity:** Opponent's mistake that player didn't capitalize on (opponent makes error, player's response doesn't improve position)
+
+**Implementation:**
+
+**Backend analysis engine:**
+* Integrate Stockfish chess engine (python-chess library includes Stockfish interface)
+* For each game in dataset:
+  1. Parse PGN and replay game move-by-move
+  2. Run Stockfish evaluation after each move (depth 15-18 for balance of speed/accuracy)
+  3. Calculate evaluation difference between moves
+  4. Classify mistakes based on centipawn thresholds
+  5. Categorize each mistake by game stage (move number)
+  6. Detect missed opportunities: opponent mistake followed by suboptimal player response
+* Aggregate statistics:
+  - Total mistakes/blunders/inaccuracies per stage
+  - Average centipawn loss per stage
+  - Most critical mistakes (biggest evaluation drops)
+  - Games with most mistakes per stage
+  - Missed opportunity count per stage
+
+**Performance optimization:**
+* Cache engine analysis results per game (store in database/Redis)
+* Analyze games asynchronously in background if dataset is large
+* Use multiprocessing for parallel game analysis
+* Limit Stockfish analysis depth based on time constraints (depth 15 = ~2 seconds per position)
+* For 100 games with avg 40 moves each = 4000 positions × 2 sec = ~2.2 hours full analysis
+* **Solution:** Incremental analysis
+  - Analyze only new games not in cache
+  - Show progress indicator: "Analyzing game X of Y"
+  - Allow user to proceed with partial results
+  - Background job completes full analysis
+
+**Frontend visualization:**
+
+**Table display:**
+
+| Game Stage | Total Moves | Inaccuracies | Mistakes | Blunders | Missed Opportunities | Avg CP Loss | Critical Mistakes |
+|------------|-------------|--------------|----------|----------|----------------------|-------------|-------------------|
+| Early (1-7) | 450 | 12 | 8 | 3 | 5 | -45 | [Link to game] |
+| Middle (8-20) | 1200 | 35 | 22 | 12 | 18 | -78 | [Link to game] |
+| Endgame (21+) | 800 | 18 | 15 | 8 | 10 | -92 | [Link to game] |
+
+**Table details:**
+* **Total Moves:** Count of player moves in this stage across all games
+* **Inaccuracies/Mistakes/Blunders:** Count of each error type
+* **Missed Opportunities:** Times opponent blundered but player didn't capitalize
+* **Avg CP Loss:** Average centipawn loss per mistake in this stage
+* **Critical Mistakes:** Link to game with biggest blunder in this stage
+
+**Visual summary card:**
+* "Your weakest stage: [Middle game]" (stage with highest mistake rate)
+* "Most common error: [Mistakes in middlegame]" 
+* "Biggest improvement area: [Endgame technique]" (highest avg CP loss)
+
+**Technical implementation:**
+
+```python
+import chess
+import chess.engine
+import chess.pgn
+from io import StringIO
+
+def analyze_game_mistakes(pgn_string, stockfish_path="/usr/games/stockfish"):
+    """
+    Analyze a single game for mistakes across all stages.
+    
+    Returns dict with mistake analysis per stage.
+    """
+    game = chess.pgn.read_game(StringIO(pgn_string))
+    board = game.board()
+    engine = chess.engine.SimpleEngine.popen_uci(stockfish_path)
+    
+    mistakes = {
+        "early": {"inaccuracies": 0, "mistakes": 0, "blunders": 0, "missed_opps": 0, "cp_loss": []},
+        "middle": {"inaccuracies": 0, "mistakes": 0, "blunders": 0, "missed_opps": 0, "cp_loss": []},
+        "endgame": {"inaccuracies": 0, "mistakes": 0, "blunders": 0, "missed_opps": 0, "cp_loss": []}
+    }
+    
+    prev_eval = None
+    move_number = 0
+    player_color = chess.WHITE  # Adjust based on player's color
+    
+    for move in game.mainline_moves():
+        move_number += 1
+        
+        # Determine game stage
+        if move_number <= 14:  # 7 full moves
+            stage = "early"
+        elif move_number <= 40:  # Up to move 20
+            stage = "middle"
+        else:
+            stage = "endgame"
+        
+        # Only analyze player's moves
+        if board.turn == player_color:
+            # Get evaluation before move
+            info = engine.analyse(board, chess.engine.Limit(depth=15))
+            current_eval = info["score"].relative.score(mate_score=10000)
+            
+            # Make the move
+            board.push(move)
+            
+            # Get evaluation after move
+            info = engine.analyse(board, chess.engine.Limit(depth=15))
+            new_eval = info["score"].relative.score(mate_score=10000)
+            
+            # Calculate centipawn loss (from player's perspective)
+            if prev_eval is not None and current_eval is not None and new_eval is not None:
+                cp_loss = current_eval - new_eval
+                
+                # Classify mistake
+                if cp_loss >= 200:
+                    mistakes[stage]["blunders"] += 1
+                    mistakes[stage]["cp_loss"].append(cp_loss)
+                elif cp_loss >= 100:
+                    mistakes[stage]["mistakes"] += 1
+                    mistakes[stage]["cp_loss"].append(cp_loss)
+                elif cp_loss >= 50:
+                    mistakes[stage]["inaccuracies"] += 1
+                    mistakes[stage]["cp_loss"].append(cp_loss)
+            
+            prev_eval = new_eval
+        else:
+            # Opponent's move - check for missed opportunities
+            board.push(move)
+    
+    engine.quit()
+    return mistakes
+
+def aggregate_mistake_analysis(games_data):
+    """
+    Aggregate mistake analysis across all games.
+    """
+    aggregated = {
+        "early": {"total_moves": 0, "inaccuracies": 0, "mistakes": 0, "blunders": 0, 
+                  "missed_opps": 0, "cp_losses": [], "worst_game": None},
+        "middle": {"total_moves": 0, "inaccuracies": 0, "mistakes": 0, "blunders": 0,
+                   "missed_opps": 0, "cp_losses": [], "worst_game": None},
+        "endgame": {"total_moves": 0, "inaccuracies": 0, "mistakes": 0, "blunders": 0,
+                    "missed_opps": 0, "cp_losses": [], "worst_game": None}
+    }
+    
+    for game_data in games_data:
+        game_mistakes = analyze_game_mistakes(game_data["pgn"])
+        
+        for stage in ["early", "middle", "endgame"]:
+            aggregated[stage]["inaccuracies"] += game_mistakes[stage]["inaccuracies"]
+            aggregated[stage]["mistakes"] += game_mistakes[stage]["mistakes"]
+            aggregated[stage]["blunders"] += game_mistakes[stage]["blunders"]
+            aggregated[stage]["cp_losses"].extend(game_mistakes[stage]["cp_loss"])
+    
+    # Calculate averages
+    for stage in ["early", "middle", "endgame"]:
+        cp_losses = aggregated[stage]["cp_losses"]
+        aggregated[stage]["avg_cp_loss"] = sum(cp_losses) / len(cp_losses) if cp_losses else 0
+    
+    return aggregated
+```
+
+**API endpoint update:**
+* Extend `/api/analyze/detailed` response to include `mistake_analysis` section
+* Add query parameter `include_engine_analysis=true` (default: true)
+* Show loading progress for engine analysis
+
+**Acceptance criteria:**
+- [ ] Stockfish engine integrated and working
+- [ ] All games analyzed for mistakes across three stages
+- [ ] Mistakes correctly classified (inaccuracy/mistake/blunder)
+- [ ] Game stages correctly categorized (early/middle/endgame)
+- [ ] Centipawn loss calculated accurately
+- [ ] Missed opportunities detected (opponent mistake + player's response)
+- [ ] Table displays all required columns with accurate data
+- [ ] Links to critical mistake games work correctly
+- [ ] Average CP loss calculated per stage
+- [ ] Visual summary identifies weakest stage
+- [ ] Engine analysis cached to avoid re-analysis
+- [ ] Loading indicator shows analysis progress
+- [ ] Analysis completes within reasonable time (< 30 seconds for cached games)
+- [ ] Handles games without engine analysis gracefully
+- [ ] Works for games from player's perspective (both White and Black)
+
+---
+
+## Milestone 9: AI-powered chess advisor
+
+**Status:** 🔄 In Progress  
+**Start Date:** December 12, 2025
+
+### Overview
+
+This milestone integrates OpenAI's GPT-4 API to provide personalized, actionable coaching advice based on comprehensive analysis of all dashboard sections. The AI advisor synthesizes data from performance trends, opening repertoire, mistake patterns, time-of-day performance, and more to deliver targeted recommendations for improvement.
+
+### Section 10: AI chess advisor recommendations
+
+**Requirement ID:** EA-019
+
+**User story:** As a chess player, I want to receive personalized coaching advice based on my complete performance analysis so I can focus my training on the most impactful areas for improvement.
+
+**Implementation:**
+
+**Data preparation:**
+* Aggregate summary statistics from all sections (1-9)
+* Do NOT send raw PGN data (too large, privacy concern)
+* Send only processed metrics and insights
+
+**Summary data structure:**
+```json
+{
+  "username": "jay_fh",
+  "date_range": "Jan 1 - Mar 31, 2025",
+  "total_games": 150,
+  "overall_stats": {
+    "win_rate": 52.3,
+    "rating_change": +25,
+    "rating_trend": "improving"
+  },
+  "color_performance": {
+    "white_win_rate": 54.2,
+    "black_win_rate": 50.1,
+    "stronger_color": "white"
+  },
+  "termination_patterns": {
+    "most_common_win_method": "checkmate",
+    "most_common_loss_method": "timeout",
+    "timeout_loss_percentage": 35
+  },
+  "opening_performance": {
+    "best_openings": ["Italian Game (75% win rate)", "Queen's Gambit (70%)"],
+    "worst_openings": ["French Defense (30% win rate)", "Caro-Kann (35%)"],
+    "opening_diversity": "moderate"
+  },
+  "opponent_strength": {
+    "best_against": "lower_rated",
+    "struggle_against": "higher_rated",
+    "lower_rated_wr": 68,
+    "similar_rated_wr": 52,
+    "higher_rated_wr": 38
+  },
+  "time_performance": {
+    "best_time": "afternoon",
+    "worst_time": "night",
+    "afternoon_wr": 58,
+    "morning_wr": 51,
+    "night_wr": 45
+  },
+  "mistake_analysis": {
+    "weakest_stage": "middle",
+    "early_game_mistakes": 23,
+    "middle_game_mistakes": 69,
+    "endgame_mistakes": 41,
+    "most_common_error": "mistakes in middlegame",
+    "missed_opportunities": 33,
+    "avg_cp_loss": {
+      "early": -45,
+      "middle": -78,
+      "endgame": -92
+    }
+  }
+}
+```
+
+**OpenAI API integration:**
+
+**Model selection:** GPT-4 (or GPT-4-turbo for faster response)
+* **GPT-4:** More thorough analysis, higher quality advice (~$0.03 per 1K input tokens, ~$0.06 per 1K output tokens)
+* **GPT-4-turbo:** Faster, slightly lower cost (~$0.01 per 1K input tokens, ~$0.03 per 1K output tokens)
+* **Recommendation:** Start with GPT-4-turbo to keep costs < $0.01 per analysis
+
+**System prompt design:**
+
+```python
+SYSTEM_PROMPT = """
+You are an expert chess coach analyzing a player's performance data. Your goal is to provide 
+concise, actionable advice to help them improve their chess skills.
+
+Based on the provided statistics, generate:
+1. Section-specific recommendations (up to 7 suggestions, one per relevant section)
+2. One overall recommendation that ties everything together
+
+Format your response as bullet points. Each suggestion should:
+- Be specific and actionable
+- Reference concrete data from the analysis
+- Provide clear next steps for improvement
+- Be concise (1-2 sentences max)
+
+Focus on the most impactful areas for improvement. Prioritize:
+1. Patterns with clear negative impact (e.g., high timeout losses)
+2. Significant performance gaps (e.g., 20%+ difference between time periods)
+3. Mistake patterns that repeat across games
+4. Areas where small changes yield big results
+
+Avoid:
+- Generic advice ("study more tactics")
+- Obvious statements ("you lose when you blunder")
+- Overwhelming the player with too many suggestions
+
+Tone: Encouraging but honest, like a supportive coach.
+"""
+
+USER_PROMPT_TEMPLATE = """
+Analyze this chess player's performance and provide coaching recommendations:
+
+{summary_data_json}
+
+Provide recommendations in this format:
+
+**Section-Specific Suggestions:**
+- [Suggestion 1 based on relevant section]
+- [Suggestion 2 based on relevant section]
+- ... (up to 7 suggestions)
+
+**Overall Recommendation:**
+- [One key overarching advice that synthesizes all insights]
+"""
+```
+
+**API implementation:**
+
+```python
+import openai
+import json
+import os
+
+class ChessAdvisorService:
+    def __init__(self):
+        self.api_key = os.getenv("OPENAI_API_KEY")
+        openai.api_key = self.api_key
+        self.model = "gpt-4-turbo"  # or "gpt-4"
+        self.max_tokens = 500  # Limit response length for cost control
+    
+    def generate_advice(self, summary_data: dict) -> dict:
+        """
+        Generate personalized chess coaching advice using GPT-4.
+        
+        Args:
+            summary_data: Aggregated statistics from all analysis sections
+            
+        Returns:
+            dict with 'section_suggestions' (list) and 'overall_recommendation' (str)
+        """
+        try:
+            # Prepare user prompt
+            user_prompt = USER_PROMPT_TEMPLATE.format(
+                summary_data_json=json.dumps(summary_data, indent=2)
+            )
+            
+            # Call OpenAI API
+            response = openai.ChatCompletion.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt}
+                ],
+                max_tokens=self.max_tokens,
+                temperature=0.7,  # Balanced creativity and consistency
+                presence_penalty=0.1,  # Slight penalty for repetition
+                frequency_penalty=0.1
+            )
+            
+            # Parse response
+            advice_text = response.choices[0].message.content
+            
+            # Extract suggestions and overall recommendation
+            parsed_advice = self._parse_advice_response(advice_text)
+            
+            # Log token usage for cost monitoring
+            tokens_used = response.usage.total_tokens
+            estimated_cost = self._calculate_cost(tokens_used)
+            
+            return {
+                "section_suggestions": parsed_advice["suggestions"],
+                "overall_recommendation": parsed_advice["overall"],
+                "tokens_used": tokens_used,
+                "estimated_cost": estimated_cost
+            }
+            
+        except Exception as e:
+            # Fallback to generic advice if API fails
+            return self._generate_fallback_advice(summary_data)
+    
+    def _parse_advice_response(self, response_text: str) -> dict:
+        """
+        Parse GPT response into structured format.
+        """
+        lines = response_text.strip().split("\n")
+        suggestions = []
+        overall = ""
+        
+        current_section = None
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            
+            if "Section-Specific" in line or "**Section-Specific" in line:
+                current_section = "suggestions"
+            elif "Overall Recommendation" in line or "**Overall Recommendation" in line:
+                current_section = "overall"
+            elif line.startswith("-") or line.startswith("•"):
+                suggestion = line.lstrip("-•").strip()
+                if current_section == "suggestions":
+                    suggestions.append(suggestion)
+                elif current_section == "overall":
+                    overall = suggestion
+        
+        return {
+            "suggestions": suggestions,
+            "overall": overall
+        }
+    
+    def _calculate_cost(self, tokens: int) -> float:
+        """
+        Calculate estimated cost based on token usage.
+        GPT-4-turbo pricing: ~$0.01 input + ~$0.03 output per 1K tokens
+        """
+        # Rough estimate: assume 60% input, 40% output
+        input_tokens = tokens * 0.6
+        output_tokens = tokens * 0.4
+        
+        cost = (input_tokens / 1000 * 0.01) + (output_tokens / 1000 * 0.03)
+        return round(cost, 4)
+    
+    def _generate_fallback_advice(self, summary_data: dict) -> dict:
+        """
+        Generate basic advice if API fails.
+        """
+        suggestions = [
+            "Focus on reducing time pressure - consider playing longer time controls.",
+            "Work on middlegame tactics where most mistakes occur.",
+            "Practice your weaker openings or consider switching to more comfortable repertoire."
+        ]
+        
+        overall = "Continue analyzing your games and focus on consistent play in your strongest time periods."
+        
+        return {
+            "section_suggestions": suggestions,
+            "overall_recommendation": overall,
+            "tokens_used": 0,
+            "estimated_cost": 0
+        }
+```
+
+**Rate limiting and cost control:**
+* Max tokens per request: 500 (limits output length)
+* Cache AI advice for same analysis parameters (1 hour TTL)
+* Estimated cost per analysis: $0.005-$0.01 (well under 1 cent target)
+* Monitor monthly API costs, implement usage alerts
+* Fallback to rule-based advice if API quota exceeded
+
+**Frontend implementation:**
+
+**Section position:** Bottom of dashboard (after all analytics sections)
+
+**UI design:**
+```
+┌─────────────────────────────────────────────┐
+│ 🤖 AI Chess Coach Recommendations          │
+│                                             │
+│ Based on your 150 games from Jan-Mar 2025  │
+│                                             │
+│ 📋 Key Suggestions:                         │
+│   • Your timeout losses (35%) suggest time │
+│     management issues. Practice playing    │
+│     increment time controls to build clock │
+│     awareness.                              │
+│                                             │
+│   • You lose 78% of games against higher   │
+│     rated opponents. Study defensive       │
+│     techniques and focus on solid play.    │
+│                                             │
+│   • Middlegame is your weakest phase (69   │
+│     mistakes). Solve tactical puzzles      │
+│     focused on moves 10-20.                │
+│                                             │
+│   • Night performance (45% WR) is          │
+│     significantly lower than afternoon     │
+│     (58% WR). Avoid playing late if        │
+│     possible.                               │
+│                                             │
+│   • Your French Defense has a 30% win rate.│
+│     Consider replacing it with a more      │
+│     reliable opening or study key lines.   │
+│                                             │
+│ 🎯 Overall Recommendation:                  │
+│   • Your biggest lever for improvement is  │
+│     reducing time pressure errors and      │
+│     strengthening your middlegame tactical │
+│     vision. Focus 70% of study time on     │
+│     tactics and 30% on your French Defense │
+│     alternative. Play during afternoon     │
+│     hours when you perform best.           │
+│                                             │
+│ [🔄 Regenerate Advice]                      │
+└─────────────────────────────────────────────┘
+```
+
+**Loading state:**
+* Show spinner with message: "AI Coach is analyzing your games..."
+* Display progress: "This may take up to 10 seconds"
+* If takes longer than 10 seconds, show: "Almost done..."
+* Timeout after 15 seconds with error message and fallback advice
+
+**Error handling:**
+* API failure → Show fallback rule-based advice
+* Timeout → Show partial results with notice
+* Rate limit exceeded → Show cached advice or generic tips
+* Invalid response → Parse what's possible, show partial advice
+
+**Acceptance criteria:**
+- [ ] OpenAI GPT-4-turbo API integrated and working
+- [ ] System prompt produces relevant, actionable advice
+- [ ] Summary data includes all sections (1-9) without raw PGN
+- [ ] API response parsed correctly into bullet points
+- [ ] Section-specific suggestions displayed (up to 7)
+- [ ] Overall recommendation displayed
+- [ ] Advice is specific and references actual player data
+- [ ] Loading state shows during API call (< 10 seconds)
+- [ ] Cost per analysis < $0.01 (verified through monitoring)
+- [ ] AI advice cached for 1 hour (same parameters)
+- [ ] Fallback advice works when API fails
+- [ ] Error states handled gracefully
+- [ ] Section appears at bottom of dashboard
+- [ ] Regenerate button works (calls API again)
+- [ ] Token usage and cost logged for monitoring
+- [ ] Privacy: No raw PGN data sent to OpenAI
+- [ ] Rate limiting prevents excessive API calls
+- [ ] UI is responsive on mobile devices
+
+---
+
+### Testing for Milestones 8 & 9
+
+**TC-021: Mistake analysis by game stage**
+* Complete analysis workflow with engine analysis enabled
+* Verify Section 9 displays mistake analysis table
+* Verify table shows three rows (early/middle/endgame)
+* Verify mistake counts (inaccuracies/mistakes/blunders) are present
+* Verify average CP loss calculated per stage
+* Verify links to critical mistake games work
+* Verify weakest stage identified correctly
+* Click on game link, verify it opens correct game on Chess.com
+* Verify loading indicator shows during engine analysis
+* Verify analysis completes within reasonable time
+
+**TC-022: Engine analysis caching**
+* Run analysis for date range with 50 games
+* Note analysis time
+* Run same analysis again immediately
+* Verify second analysis is significantly faster (< 5 seconds)
+* Verify results are identical
+* Verify cache hit logged in backend
+
+**TC-023: Missed opportunity detection**
+* Verify missed opportunities column shows count > 0
+* Manually review 2-3 games to validate opponent mistakes detected
+* Verify player's suboptimal response identified
+
+**TC-024: AI advisor basic functionality**
+* Complete full analysis workflow
+* Verify Section 10 (AI Coach) appears at bottom
+* Verify loading indicator shows "AI Coach is analyzing..."
+* Verify advice appears within 10 seconds
+* Verify section-specific suggestions displayed (up to 7 bullet points)
+* Verify overall recommendation displayed
+* Verify advice references actual player data (percentages, numbers)
+
+**TC-025: AI advisor advice quality**
+* Read all suggestions provided
+* Verify advice is specific (not generic)
+* Verify advice references concrete stats (e.g., "35% timeout losses")
+* Verify advice is actionable (tells player what to do)
+* Verify no raw PGN data visible in network requests (check DevTools)
+* Verify advice makes sense given the displayed analytics
+
+**TC-026: AI advisor error handling**
+* Disconnect internet before clicking analyze
+* Verify fallback advice displayed
+* Verify error message shown
+* Reconnect and verify API call works
+* Test with invalid API key (backend config)
+* Verify graceful degradation to rule-based advice
+
+**TC-027: AI advisor caching**
+* Complete analysis for username + date range
+* Note the specific advice given
+* Immediately run same analysis again
+* Verify identical advice returned (cached)
+* Verify second response is faster (< 2 seconds)
+* Wait 1 hour, run again
+* Verify new API call made (cache expired)
+
+**TC-028: AI advisor regenerate**
+* Complete analysis and receive AI advice
+* Click "Regenerate Advice" button
+* Verify new API call made
+* Verify new advice displayed (may be similar but timestamp updated)
+* Verify loading state shown during regeneration
+
+**TC-029: Cost monitoring**
+* Complete 10 analyses with AI advisor
+* Check backend logs for token usage
+* Verify total cost < $0.10 for 10 analyses
+* Verify average cost per analysis < $0.01
+
+**TC-030: End-to-end full dashboard**
+* Complete analysis with all sections (1-10)
+* Verify all sections render without errors
+* Verify smooth scrolling through entire dashboard
+* Verify AI advice synthesizes data from all sections
+* Verify loading states don't block other sections
+* Verify mobile responsive design for all new sections
+* Verify no JavaScript console errors
+
+---
+
 # Tech stack
 
 **Backend**
@@ -681,10 +1320,13 @@ def identify_opening(pgn_string):
 * Flask (existing)
 * Python 3.12
 * Chess.com Public API
-* `python-chess` library for PGN parsing
+* `python-chess` library for PGN parsing and Stockfish integration
 * `requests` for API calls
 * `pytz` or `zoneinfo` for timezone handling
+* `openai` Python library for GPT-4 API integration
+* Stockfish chess engine (local installation)
 * SQLAlchemy (optional, for caching)
+* Redis (recommended for caching engine analysis and AI advice)
 * Custom caching utilities (existing)
 
 **Frontend**
@@ -695,17 +1337,33 @@ def identify_opening(pgn_string):
 * Fetch API for asynchronous requests
 * Intl API for timezone detection
 
+**AI/ML Services**
+
+* OpenAI GPT-4-turbo API for chess coaching advice
+* Stockfish 15+ chess engine for move analysis
+* Multiprocessing for parallel game analysis
+
 **Testing**
 
 * Playwright for E2E testing
 * unittest/pytest for backend unit tests
 * Test with real user data (username: 'jay_fh')
+* OpenAI API cost monitoring and logging
 
 **Development tools**
 
 * uv for package management
 * Git for version control
 * GitHub for repository hosting
+* Stockfish executable (system dependency)
+* OpenAI API cost monitoring and logging
+
+**Development tools**
+
+* uv for package management
+* Git for version control
+* GitHub for repository hosting
+* Stockfish executable (system dependency)
 
 ---
 
@@ -724,15 +1382,19 @@ Flask API Routes
     ↓
 [PGN Parser]
     ↓
+[Mistake Analysis Engine] ← → [Stockfish Engine]
+    ↓
 [Statistics Calculator]
     ↓
-[Cache Layer] (optional)
+[AI Advisor Service] ← → [OpenAI GPT-4 API]
+    ↓
+[Cache Layer] (Redis - engine analysis + AI advice)
     ↓
 JSON Response
     ↓
-[Chart.js Visualizations]
+[Chart.js Visualizations + AI Recommendations]
     ↓
-User sees comprehensive analytics
+User sees comprehensive analytics with AI coaching
 ```
 
 **Data flow:**
@@ -743,11 +1405,15 @@ User sees comprehensive analytics
 4. Backend validates inputs
 5. Backend fetches games from Chess.com API
 6. Backend parses PGN data for openings
-7. Backend calculates all 8 analytics sections
-8. Backend converts timestamps to user timezone
-9. Backend returns comprehensive JSON response
-10. Frontend renders 8 analytics sections with Chart.js
-11. User scrolls through single-page dashboard
+7. Backend runs Stockfish engine analysis for mistake detection (cached if available)
+8. Backend calculates all analytics sections (1-9)
+9. Backend prepares summary data for AI advisor
+10. Backend calls OpenAI GPT-4 API for personalized coaching advice
+11. Backend converts timestamps to user timezone
+12. Backend returns comprehensive JSON response (including AI advice)
+13. Frontend renders all sections with Chart.js
+14. Frontend displays AI coaching recommendations at bottom
+15. User scrolls through complete analytics dashboard with AI insights
 
 ---
 
@@ -810,6 +1476,19 @@ The analytics dashboard will be a single-page scrollable experience with a clean
 │ Section 8: Time of Day Performance          │
 │ [Grouped bar chart or 3 cards]             │
 │ Morning | Afternoon | Night                 │
+└─────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────┐
+│ Section 9: Mistake Analysis by Game Stage   │
+│ [Table: Early/Middle/Endgame mistakes]     │
+│ Inaccuracies | Mistakes | Blunders          │
+└─────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────┐
+│ Section 10: AI Chess Coach                  │
+│ 🤖 Personalized Recommendations             │
+│ • Section-specific suggestions (up to 7)    │
+│ • Overall recommendation                    │
 └─────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────┐
@@ -964,12 +1643,15 @@ The test user 'jay_fh' represents a typical user who wants comprehensive analysi
 # Success metrics
 
 **Functional metrics:**
-* All 8 analytics sections render correctly with accurate data
+* All 10 analytics sections render correctly with accurate data
 * Timezone conversion works correctly across all time zones
 * PGN parsing successfully extracts opening names (>95% success rate)
-* API response time < 5 seconds for 3-month analysis
+* API response time < 10 seconds for 3-month analysis (including engine analysis)
+* Stockfish engine analysis accuracy validated against manual review
+* AI advisor provides relevant, actionable advice (qualitative assessment)
+* AI API cost per analysis < $0.01
 * Zero critical bugs in production for statistical calculations
-* All Playwright E2E tests pass
+* All Playwright E2E tests pass (30 test cases)
 
 **User experience metrics:**
 * Dashboard loads and renders within 6 seconds
@@ -1380,11 +2062,50 @@ After deployment:
 **So that** I don't have to wait long for insights
 
 **Acceptance criteria:**
-- [ ] Analysis completes within 6 seconds for 3-month range
+- [ ] Analysis completes within 10 seconds for 3-month range (including AI advisor)
 - [ ] Caching reduces redundant API calls
 - [ ] Loading states indicate progress
 - [ ] No UI lag when scrolling dashboard
 - [ ] Charts render smoothly
+
+---
+
+## EA-018: Mistake analysis by game stage
+**As a** chess player  
+**I want to** identify which game stage I make the most mistakes in  
+**So that** I can focus my training on specific phases of play
+
+**Acceptance criteria:**
+- [ ] Stockfish engine analyzes all games for mistakes
+- [ ] Mistakes categorized by game stage (early/middle/endgame)
+- [ ] Mistakes classified as inaccuracy/mistake/blunder
+- [ ] Centipawn loss calculated and displayed
+- [ ] Missed opportunities detected and counted
+- [ ] Table displays all required data columns
+- [ ] Links to critical mistake games work
+- [ ] Engine analysis cached for performance
+- [ ] Loading indicator shows analysis progress
+
+---
+
+## EA-019: AI-powered chess advisor
+**As a** chess player  
+**I want to** receive personalized coaching advice based on my complete analysis  
+**So that** I know exactly what to work on to improve
+
+**Acceptance criteria:**
+- [ ] OpenAI GPT-4 API integrated
+- [ ] Summary data includes insights from all sections (no raw PGN)
+- [ ] AI generates section-specific suggestions (up to 7)
+- [ ] AI generates one overall recommendation
+- [ ] Advice is specific and actionable
+- [ ] Advice references actual player statistics
+- [ ] Cost per analysis < $0.01
+- [ ] Response time < 10 seconds
+- [ ] Loading state shown during AI processing
+- [ ] Fallback advice works if API fails
+- [ ] AI advice cached for 1 hour
+- [ ] Section appears at bottom of dashboard
 
 ---
 
@@ -1622,17 +2343,43 @@ Not included in this PRD but potential future additions:
 * Compare performance across multiple time periods
 * Head-to-head comparison against specific opponents
 * Advanced opening tree visualization
-* Game replay with critical moments
-* Move-by-move accuracy analysis
-* Blunder detection and categorization
+* Game replay with critical moments highlighting mistakes
+* Move-by-move accuracy analysis with interactive board
 * Performance correlation analysis (rating vs time control, etc.)
 * Email notifications for milestone achievements
 * Social features (compare with friends)
 * Integration with other chess platforms (Lichess, Chess24)
+* AI-powered opening recommendations based on playing style
+* Deeper engine analysis (depth 20+) for premium users
+* Video lessons recommendations based on weaknesses
+* Progress tracking over multiple months with trend analysis
 
 ---
 
-**Document Version:** 1.0  
+**Document Version:** 2.0  
 **Created:** December 5, 2025  
+**Last Updated:** December 12, 2025  
 **Author:** PRD Agent  
-**Status:** Ready for Review
+**Status:** Updated with Milestones 8-9
+
+---
+
+## Changelog
+
+**Version 2.0 (December 12, 2025):**
+* Added Milestone 8: Game Stage Mistake Analysis (Section 9)
+* Added Milestone 9: AI-Powered Chess Advisor (Section 10)
+* Integrated Stockfish engine for move analysis
+* Integrated OpenAI GPT-4 API for personalized coaching
+* Added 10 new E2E test cases (TC-021 through TC-030)
+* Updated system architecture diagram
+* Updated tech stack with AI/ML dependencies
+* Updated success metrics and acceptance criteria
+* Total sections: 10 (previously 8)
+* Total test cases: 30 (previously 20)
+
+**Version 1.0 (December 5, 2025):**
+* Initial PRD with 8 analytics sections
+* 7 milestones defined
+* Complete technical specifications
+* 20 E2E test cases

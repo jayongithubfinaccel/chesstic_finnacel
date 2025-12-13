@@ -245,6 +245,16 @@ async function renderDashboard(data) {
     await renderOpeningPerformance(data.sections.opening_performance);
     await renderOpponentStrength(data.sections.opponent_strength);
     await renderTimeOfDay(data.sections.time_of_day);
+    
+    // Milestone 8: Mistake Analysis (if available)
+    if (data.sections.mistake_analysis) {
+        await renderMistakeAnalysis(data.sections.mistake_analysis);
+    }
+    
+    // Milestone 9: AI Chess Advisor (if available)
+    if (data.sections.ai_advice) {
+        await renderAIAdvisor(data.sections.ai_advice, data);
+    }
 }
 
 // Render Analysis Header
@@ -850,6 +860,323 @@ function renderTimeCard(elementId, data) {
 
 // Note: Bar chart removed for Section 8 per Milestone 7 requirements
 // Only card-based display is used
+
+// ==================== MILESTONE 8: MISTAKE ANALYSIS RENDERING ====================
+
+async function renderMistakeAnalysis(data) {
+    const section = document.getElementById('mistakeAnalysisSection');
+    if (!section) return;
+    
+    // Show section
+    section.style.display = 'block';
+    
+    // Render summary cards
+    renderMistakeSummary(data);
+    
+    // Render mistake table
+    renderMistakeTable(data);
+}
+
+function renderMistakeSummary(data) {
+    // Weakest stage
+    const weakestStage = document.getElementById('weakestStage');
+    if (weakestStage) {
+        weakestStage.textContent = data.weakest_stage || 'N/A';
+    }
+    
+    // Most common error
+    const mostCommonError = document.getElementById('mostCommonError');
+    if (mostCommonError) {
+        const errorText = identifyMostCommonError(data);
+        mostCommonError.textContent = errorText;
+    }
+    
+    // Total mistakes
+    const totalMistakes = document.getElementById('totalMistakes');
+    if (totalMistakes) {
+        const total = (data.early?.inaccuracies || 0) + (data.early?.mistakes || 0) + (data.early?.blunders || 0) +
+                      (data.middle?.inaccuracies || 0) + (data.middle?.mistakes || 0) + (data.middle?.blunders || 0) +
+                      (data.endgame?.inaccuracies || 0) + (data.endgame?.mistakes || 0) + (data.endgame?.blunders || 0);
+        totalMistakes.textContent = total;
+    }
+}
+
+function identifyMostCommonError(data) {
+    let maxCount = 0;
+    let maxError = 'None detected';
+    
+    const stages = [
+        { name: 'early', display: 'early game' },
+        { name: 'middle', display: 'middlegame' },
+        { name: 'endgame', display: 'endgame' }
+    ];
+    
+    const errorTypes = [
+        { key: 'blunders', display: 'blunders' },
+        { key: 'mistakes', display: 'mistakes' },
+        { key: 'inaccuracies', display: 'inaccuracies' }
+    ];
+    
+    stages.forEach(stage => {
+        errorTypes.forEach(error => {
+            const count = data[stage.name]?.[error.key] || 0;
+            if (count > maxCount) {
+                maxCount = count;
+                maxError = `${error.display} in ${stage.display}`;
+            }
+        });
+    });
+    
+    return maxError;
+}
+
+function renderMistakeTable(data) {
+    const tbody = document.getElementById('mistakeTableBody');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '';
+    
+    const stages = [
+        { key: 'early', display: 'Early (1-7)', class: 'stage-early' },
+        { key: 'middle', display: 'Middlegame (8-20)', class: 'stage-middle' },
+        { key: 'endgame', display: 'Endgame (21+)', class: 'stage-endgame' }
+    ];
+    
+    stages.forEach(stage => {
+        const stageData = data[stage.key] || {};
+        const row = document.createElement('tr');
+        
+        // Game Stage
+        const stageCell = document.createElement('td');
+        stageCell.innerHTML = `<span class="stage-name ${stage.class}">${stage.display}</span>`;
+        row.appendChild(stageCell);
+        
+        // Total Moves
+        const movesCell = document.createElement('td');
+        movesCell.textContent = stageData.total_moves || 0;
+        row.appendChild(movesCell);
+        
+        // Inaccuracies
+        const inaccCell = document.createElement('td');
+        inaccCell.innerHTML = getMistakeCountHTML(stageData.inaccuracies || 0);
+        row.appendChild(inaccCell);
+        
+        // Mistakes
+        const mistakeCell = document.createElement('td');
+        mistakeCell.innerHTML = getMistakeCountHTML(stageData.mistakes || 0);
+        row.appendChild(mistakeCell);
+        
+        // Blunders
+        const blunderCell = document.createElement('td');
+        blunderCell.innerHTML = getMistakeCountHTML(stageData.blunders || 0, true);
+        row.appendChild(blunderCell);
+        
+        // Missed Opportunities
+        const missedCell = document.createElement('td');
+        missedCell.innerHTML = getMistakeCountHTML(stageData.missed_opps || 0);
+        row.appendChild(missedCell);
+        
+        // Avg CP Loss
+        const cpLossCell = document.createElement('td');
+        const cpLoss = Math.abs(stageData.avg_cp_loss || 0);
+        cpLossCell.innerHTML = getCPLossHTML(cpLoss);
+        row.appendChild(cpLossCell);
+        
+        // Critical Mistake
+        const criticalCell = document.createElement('td');
+        const worstGame = stageData.worst_game;
+        if (worstGame && worstGame.game_url) {
+            criticalCell.innerHTML = `<a href="${worstGame.game_url}" target="_blank" class="critical-mistake-link">Move ${worstGame.move_number} (-${worstGame.cp_loss}cp)</a>`;
+        } else {
+            criticalCell.textContent = 'N/A';
+        }
+        row.appendChild(criticalCell);
+        
+        tbody.appendChild(row);
+    });
+}
+
+function getMistakeCountHTML(count, isBlunder = false) {
+    if (count === 0) {
+        return `<span class="mistake-count mistake-count-low">${count}</span>`;
+    } else if (isBlunder || count >= 10) {
+        return `<span class="mistake-count mistake-count-high">${count}</span>`;
+    } else if (count >= 5) {
+        return `<span class="mistake-count mistake-count-medium">${count}</span>`;
+    } else {
+        return `<span class="mistake-count">${count}</span>`;
+    }
+}
+
+function getCPLossHTML(cpLoss) {
+    let className = 'cp-loss';
+    if (cpLoss >= 80) {
+        className += ' cp-loss-high';
+    } else if (cpLoss >= 50) {
+        className += ' cp-loss-medium';
+    } else {
+        className += ' cp-loss-low';
+    }
+    
+    return `<span class="${className}">-${cpLoss.toFixed(1)}</span>`;
+}
+
+// ==================== MILESTONE 9: AI ADVISOR RENDERING ====================
+
+async function renderAIAdvisor(aiData, fullData) {
+    const section = document.getElementById('aiAdvisorSection');
+    if (!section) return;
+    
+    // Show section
+    section.style.display = 'block';
+    
+    // Update context description
+    const contextElement = document.getElementById('aiAdvisorContext');
+    if (contextElement && fullData.total_games) {
+        contextElement.textContent = `Based on your ${fullData.total_games} games from ${fullData.start_date} to ${fullData.end_date}`;
+    }
+    
+    // Hide loading, show content
+    const loading = document.getElementById('aiLoading');
+    const content = document.getElementById('aiContent');
+    const error = document.getElementById('aiError');
+    
+    if (loading) loading.style.display = 'none';
+    if (error) error.style.display = 'none';
+    
+    if (content) {
+        content.style.display = 'block';
+        
+        // Render suggestions
+        renderAISuggestions(aiData.section_suggestions || []);
+        
+        // Render overall recommendation
+        renderAIOverall(aiData.overall_recommendation || '');
+        
+        // Show token/cost info if available (development mode)
+        if (aiData.tokens_used) {
+            renderAICostInfo(aiData.tokens_used, aiData.estimated_cost);
+        }
+        
+        // Set up regenerate button
+        setupRegenerateButton();
+    }
+}
+
+function renderAISuggestions(suggestions) {
+    const list = document.getElementById('aiSuggestionsList');
+    if (!list) return;
+    
+    list.innerHTML = '';
+    
+    if (!suggestions || suggestions.length === 0) {
+        list.innerHTML = '<li>No specific suggestions available at this time.</li>';
+        return;
+    }
+    
+    suggestions.forEach(suggestion => {
+        const li = document.createElement('li');
+        li.textContent = suggestion;
+        list.appendChild(li);
+    });
+}
+
+function renderAIOverall(recommendation) {
+    const element = document.getElementById('aiOverallRecommendation');
+    if (!element) return;
+    
+    element.textContent = recommendation || 'Continue analyzing your games and focus on consistent improvement.';
+}
+
+function renderAICostInfo(tokens, cost) {
+    const costInfo = document.getElementById('aiCostInfo');
+    if (!costInfo) return;
+    
+    // Only show in development mode (you can add a config flag)
+    const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    
+    if (isDev) {
+        document.getElementById('tokensUsed').textContent = tokens;
+        document.getElementById('estimatedCost').textContent = cost.toFixed(4);
+        costInfo.style.display = 'block';
+    }
+}
+
+function setupRegenerateButton() {
+    const btn = document.getElementById('btnRegenerateAdvice');
+    if (!btn) return;
+    
+    // Show button
+    btn.style.display = 'block';
+    
+    // Remove existing listeners
+    btn.replaceWith(btn.cloneNode(true));
+    const newBtn = document.getElementById('btnRegenerateAdvice');
+    
+    // Add click handler
+    newBtn.addEventListener('click', async () => {
+        // Show loading state
+        const content = document.getElementById('aiContent');
+        const loading = document.getElementById('aiLoading');
+        
+        if (content) content.style.display = 'none';
+        if (loading) loading.style.display = 'block';
+        
+        // Re-fetch analysis
+        const username = document.getElementById('username').value.trim();
+        const startDate = document.getElementById('startDate').value;
+        const endDate = document.getElementById('endDate').value;
+        let timezone = document.getElementById('timezone').value;
+        
+        if (timezone === 'auto') {
+            timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        }
+        
+        try {
+            const response = await fetch('/api/analyze/detailed', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    username,
+                    start_date: startDate,
+                    end_date: endDate,
+                    timezone,
+                    include_mistake_analysis: true,
+                    include_ai_advice: true
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            
+            if (data.status === 'success') {
+                // Re-render AI advisor section only
+                await renderAIAdvisor(data.sections.ai_advice, data);
+            } else {
+                throw new Error(data.error || 'Unknown error');
+            }
+            
+        } catch (error) {
+            console.error('Error regenerating AI advice:', error);
+            showAIError();
+        }
+    });
+}
+
+function showAIError() {
+    const loading = document.getElementById('aiLoading');
+    const content = document.getElementById('aiContent');
+    const error = document.getElementById('aiError');
+    
+    if (loading) loading.style.display = 'none';
+    if (content) content.style.display = 'none';
+    if (error) error.style.display = 'block';
+}
 
 // Utility Functions
 function destroyAllCharts() {

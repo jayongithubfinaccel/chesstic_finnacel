@@ -7,26 +7,53 @@ from collections import defaultdict
 import chess.pgn
 from io import StringIO
 import re
+import logging
 
 from app.utils.timezone_utils import (
     convert_utc_to_timezone, 
     get_time_of_day_category,
     get_date_string
 )
+from app.services.mistake_analysis_service import MistakeAnalysisService
+from app.services.chess_advisor_service import ChessAdvisorService
+
+logger = logging.getLogger(__name__)
 
 
 class AnalyticsService:
     """Service for advanced chess analytics calculations."""
     
-    def __init__(self):
-        """Initialize analytics service."""
-        pass
+    def __init__(self, stockfish_path: str = 'stockfish', engine_depth: int = 15,
+                 engine_enabled: bool = True, openai_api_key: str = '',
+                 openai_model: str = 'gpt-4o-mini'):
+        """
+        Initialize analytics service.
+        
+        Args:
+            stockfish_path: Path to Stockfish executable
+            engine_depth: Engine analysis depth
+            engine_enabled: Whether to enable engine analysis
+            openai_api_key: OpenAI API key for AI advisor
+            openai_model: OpenAI model to use
+        """
+        self.mistake_analyzer = MistakeAnalysisService(
+            stockfish_path=stockfish_path,
+            engine_depth=engine_depth,
+            enabled=engine_enabled
+        )
+        self.ai_advisor = ChessAdvisorService(
+            api_key=openai_api_key,
+            model=openai_model
+        )
     
     def analyze_detailed(
         self, 
         games: List[Dict], 
         username: str, 
-        timezone: str = 'UTC'
+        timezone: str = 'UTC',
+        include_mistake_analysis: bool = True,
+        include_ai_advice: bool = True,
+        date_range: str = ''
     ) -> Dict:
         """
         Perform comprehensive analysis on games.
@@ -35,9 +62,12 @@ class AnalyticsService:
             games: List of game dictionaries from Chess.com API
             username: Player's Chess.com username
             timezone: User's timezone string
+            include_mistake_analysis: Whether to include engine mistake analysis (Milestone 8)
+            include_ai_advice: Whether to include AI advisor recommendations (Milestone 9)
+            date_range: Date range string for AI advisor context
             
         Returns:
-            Comprehensive analysis results for all 8 sections
+            Comprehensive analysis results for all sections including M8 & M9
         """
         if not games:
             return self._empty_analysis()
@@ -45,19 +75,45 @@ class AnalyticsService:
         # Analyze all games
         analyzed_games = self._parse_and_enrich_games(games, username, timezone)
         
-        return {
-            'total_games': len(analyzed_games),
-            'sections': {
-                'overall_performance': self._analyze_overall_performance(analyzed_games),
-                'color_performance': self._analyze_color_performance(analyzed_games),
-                'elo_progression': self._analyze_elo_progression(analyzed_games),
-                'termination_wins': self._analyze_termination_wins(analyzed_games),
-                'termination_losses': self._analyze_termination_losses(analyzed_games),
-                'opening_performance': self._analyze_opening_performance(analyzed_games),
-                'opponent_strength': self._analyze_opponent_strength(analyzed_games),
-                'time_of_day': self._analyze_time_of_day(analyzed_games)
-            }
+        # Core sections (Milestones 1-7)
+        sections = {
+            'overall_performance': self._analyze_overall_performance(analyzed_games),
+            'color_performance': self._analyze_color_performance(analyzed_games),
+            'elo_progression': self._analyze_elo_progression(analyzed_games),
+            'termination_wins': self._analyze_termination_wins(analyzed_games),
+            'termination_losses': self._analyze_termination_losses(analyzed_games),
+            'opening_performance': self._analyze_opening_performance(analyzed_games),
+            'opponent_strength': self._analyze_opponent_strength(analyzed_games),
+            'time_of_day': self._analyze_time_of_day(analyzed_games)
         }
+        
+        # Milestone 8: Mistake analysis by game stage
+        if include_mistake_analysis:
+            logger.info("Starting mistake analysis...")
+            mistake_analysis = self.mistake_analyzer.aggregate_mistake_analysis(games, username)
+            
+            # Identify weakest stage
+            weakest_stage, reason = self.mistake_analyzer.get_weakest_stage(mistake_analysis)
+            mistake_analysis['weakest_stage'] = weakest_stage
+            mistake_analysis['weakest_stage_reason'] = reason
+            
+            sections['mistake_analysis'] = mistake_analysis
+            logger.info("Mistake analysis complete")
+        
+        # Build result
+        result = {
+            'total_games': len(analyzed_games),
+            'sections': sections
+        }
+        
+        # Milestone 9: AI-powered chess advisor
+        if include_ai_advice:
+            logger.info("Generating AI coaching advice...")
+            ai_advice = self.ai_advisor.generate_advice(result, username, date_range)
+            sections['ai_advice'] = ai_advice
+            logger.info("AI advice generated")
+        
+        return result
     
     def _parse_and_enrich_games(
         self, 

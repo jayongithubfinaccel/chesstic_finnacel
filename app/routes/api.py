@@ -1,12 +1,15 @@
 """
 API routes for chess data operations.
 """
-from flask import request, jsonify
+from flask import request, jsonify, current_app
 import requests
 from app.routes import api_bp
 from app.services.chess_service import ChessService
 from app.services.analytics_service import AnalyticsService
 from app.utils.validators import validate_username, validate_date_range, validate_timezone
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 @api_bp.route('/analyze', methods=['POST'])
@@ -194,8 +197,36 @@ def analyze_detailed():
         
         # Perform detailed analysis
         try:
-            analytics_service = AnalyticsService()
-            analysis = analytics_service.analyze_detailed(games, username, timezone)
+            # Get configuration from app config
+            config = current_app.config
+            
+            # Extract analysis options from request (optional)
+            include_mistake_analysis = data.get('include_mistake_analysis', True)
+            include_ai_advice = data.get('include_ai_advice', True)
+            
+            # Initialize analytics service with configuration
+            analytics_service = AnalyticsService(
+                stockfish_path=config.get('STOCKFISH_PATH', 'stockfish'),
+                engine_depth=config.get('ENGINE_DEPTH', 15),
+                engine_enabled=config.get('ENGINE_ANALYSIS_ENABLED', True) and include_mistake_analysis,
+                openai_api_key=config.get('OPENAI_API_KEY', ''),
+                openai_model=config.get('OPENAI_MODEL', 'gpt-4o-mini')
+            )
+            
+            # Format date range for AI advisor context
+            date_range = f"{start_date} to {end_date}"
+            
+            # Perform analysis
+            logger.info(f"Starting analysis for {username}: {date_range}")
+            analysis = analytics_service.analyze_detailed(
+                games, 
+                username, 
+                timezone,
+                include_mistake_analysis=include_mistake_analysis,
+                include_ai_advice=include_ai_advice,
+                date_range=date_range
+            )
+            logger.info(f"Analysis complete: {analysis['total_games']} games processed")
             
             # Build response
             response = {
@@ -211,6 +242,7 @@ def analyze_detailed():
             return jsonify(response), 200
             
         except Exception as e:
+            logger.error(f"Error analyzing game data: {e}")
             return jsonify({
                 'error': 'Error analyzing game data',
                 'status': 'error',

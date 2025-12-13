@@ -26,6 +26,21 @@ class Config:
     # Rate limiting (requests per minute)
     RATE_LIMIT_ENABLED = True
     RATE_LIMIT_PER_MINUTE = 30
+    
+    # OpenAI API settings (Milestone 9: AI Chess Advisor)
+    OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
+    OPENAI_MODEL = 'gpt-4o-mini'  # Using gpt-4o-mini for cost efficiency
+    OPENAI_MAX_TOKENS = 500
+    OPENAI_TEMPERATURE = 0.7
+    
+    # Stockfish engine settings (Milestone 8: Mistake Analysis)
+    STOCKFISH_PATH = os.environ.get('STOCKFISH_PATH', 'stockfish')
+    ENGINE_ANALYSIS_ENABLED = os.environ.get('ENGINE_ANALYSIS_ENABLED', 'True').lower() == 'true'
+    ENGINE_DEPTH = int(os.environ.get('ENGINE_DEPTH', '15'))
+    ENGINE_TIME_LIMIT = float(os.environ.get('ENGINE_TIME_LIMIT', '2.0'))
+    
+    # AI Advisor cache settings
+    AI_ADVICE_CACHE_TTL = 3600  # 1 hour in seconds
 
 
 class DevelopmentConfig(Config):

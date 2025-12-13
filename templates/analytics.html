@@ -313,6 +313,106 @@
                     </div>
                 </div>
             </section>
+
+            <!-- Section 9: Mistake Analysis by Game Stage (Milestone 8) -->
+            <section class="analytics-section" id="mistakeAnalysisSection" style="display: none;">
+                <div class="section-card">
+                    <div class="section-header">
+                        <h3>🔍 Mistake Analysis by Game Stage</h3>
+                        <p class="section-description">Where you lose the most centipawns</p>
+                    </div>
+                    
+                    <!-- Summary Cards -->
+                    <div class="mistake-summary" id="mistakeSummary">
+                        <div class="mistake-summary-card">
+                            <h4>Weakest Stage</h4>
+                            <p class="mistake-highlight" id="weakestStage">-</p>
+                        </div>
+                        <div class="mistake-summary-card">
+                            <h4>Most Common Error</h4>
+                            <p class="mistake-highlight" id="mostCommonError">-</p>
+                        </div>
+                        <div class="mistake-summary-card">
+                            <h4>Total Mistakes</h4>
+                            <p class="mistake-highlight" id="totalMistakes">-</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Mistake Analysis Table -->
+                    <div class="table-container">
+                        <table class="mistake-table" id="mistakeTable">
+                            <thead>
+                                <tr>
+                                    <th>Game Stage</th>
+                                    <th>Total Moves</th>
+                                    <th>Inaccuracies</th>
+                                    <th>Mistakes</th>
+                                    <th>Blunders</th>
+                                    <th>Missed Opps</th>
+                                    <th>Avg CP Loss</th>
+                                    <th>Critical Mistake</th>
+                                </tr>
+                            </thead>
+                            <tbody id="mistakeTableBody">
+                                <!-- Populated by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div class="section-note">
+                        <p>⚙️ Powered by Stockfish engine analysis. Mistakes classified by centipawn loss: Inaccuracy (50-100cp), Mistake (100-200cp), Blunder (200+cp)</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Section 10: AI Chess Advisor (Milestone 9) -->
+            <section class="analytics-section" id="aiAdvisorSection" style="display: none;">
+                <div class="section-card ai-advisor-card">
+                    <div class="section-header">
+                        <h3>🤖 AI Chess Coach Recommendations</h3>
+                        <p class="section-description" id="aiAdvisorContext">Based on your comprehensive performance analysis</p>
+                    </div>
+                    
+                    <!-- Loading State -->
+                    <div class="ai-loading" id="aiLoading">
+                        <div class="spinner"></div>
+                        <p>AI Coach is analyzing your games...</p>
+                        <p class="ai-loading-detail">This may take up to 10 seconds</p>
+                    </div>
+                    
+                    <!-- AI Advice Content -->
+                    <div class="ai-content" id="aiContent" style="display: none;">
+                        <!-- Section-Specific Suggestions -->
+                        <div class="ai-suggestions">
+                            <h4>📋 Key Suggestions:</h4>
+                            <ul id="aiSuggestionsList">
+                                <!-- Populated by JavaScript -->
+                            </ul>
+                        </div>
+                        
+                        <!-- Overall Recommendation -->
+                        <div class="ai-overall">
+                            <h4>🎯 Overall Recommendation:</h4>
+                            <p id="aiOverallRecommendation"></p>
+                        </div>
+                        
+                        <!-- Regenerate Button -->
+                        <button class="btn-regenerate" id="btnRegenerateAdvice" style="display: none;">
+                            🔄 Regenerate Advice
+                        </button>
+                        
+                        <!-- Cost Info (dev only) -->
+                        <div class="ai-cost-info" id="aiCostInfo" style="display: none;">
+                            <small>Tokens used: <span id="tokensUsed">0</span> | Estimated cost: $<span id="estimatedCost">0.0000</span></small>
+                        </div>
+                    </div>
+                    
+                    <!-- Error State -->
+                    <div class="ai-error" id="aiError" style="display: none;">
+                        <p>⚠️ Unable to generate AI recommendations. Using fallback advice.</p>
+                    </div>
+                </div>
+            </section>
         </div>
     </main>
 
