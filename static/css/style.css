@@ -842,6 +842,19 @@ body {
     align-items: center;
 }
 
+/* PRD v2.1: Styling for first 6 moves display */
+.opening-moves {
+    grid-column: 1 / -1;
+    font-family: 'Courier New', monospace;
+    font-size: 0.9em;
+    color: #555;
+    margin: 8px 0 0 0;
+    padding: 8px 12px;
+    background-color: #f8f9fa;
+    border-left: 3px solid var(--secondary-color);
+    border-radius: 4px;
+}
+
 .opening-name {
     font-weight: 600;
     color: var(--text-dark);

@@ -30,7 +30,7 @@ class Config:
     # OpenAI API settings (Milestone 9: AI Chess Advisor)
     OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
     OPENAI_MODEL = 'gpt-4o-mini'  # Using gpt-4o-mini for cost efficiency
-    OPENAI_MAX_TOKENS = 500
+    OPENAI_MAX_TOKENS = 800  # Increased to 800 for 9+1 structured recommendations (PRD v2.1)
     OPENAI_TEMPERATURE = 0.7
     
     # Stockfish engine settings (Milestone 8: Mistake Analysis)

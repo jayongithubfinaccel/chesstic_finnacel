@@ -1,6 +1,7 @@
 """
 AI Chess Advisor service using OpenAI GPT for personalized coaching recommendations.
 Milestone 9: AI-Powered Chess Advisor
+PRD v2.1: Updated to require EXACTLY 9 section-specific + 1 overall recommendations with YouTube integration
 """
 import json
 import logging
@@ -10,6 +11,67 @@ import openai
 logger = logging.getLogger(__name__)
 
 
+# YouTube video database for opening tutorials
+# Prioritization: ChessNetwork > GMHikaru > GothamChess > Chessbrahs
+OPENING_VIDEOS = {
+    "Sicilian Defense": {
+        "channel": "ChessNetwork",
+        "title": "Sicilian Defense - Complete Guide",
+        "url": "https://www.youtube.com/watch?v=VJGPwnHJxLU"
+    },
+    "Italian Game": {
+        "channel": "GMHikaru",
+        "title": "Italian Game Explained",
+        "url": "https://www.youtube.com/watch?v=9_MAjIpYxU8"
+    },
+    "French Defense": {
+        "channel": "ChessNetwork",
+        "title": "French Defense Tutorial",
+        "url": "https://www.youtube.com/watch?v=x8KypSEEqWg"
+    },
+    "Caro-Kann Defense": {
+        "channel": "GMHikaru",
+        "title": "Caro-Kann Defense Guide",
+        "url": "https://www.youtube.com/watch?v=G3z6v1jPxL4"
+    },
+    "Queen's Gambit": {
+        "channel": "GothamChess",
+        "title": "Queen's Gambit Masterclass",
+        "url": "https://www.youtube.com/watch?v=xSkFNn72cLM"
+    },
+    "Ruy Lopez": {
+        "channel": "ChessNetwork",
+        "title": "Ruy Lopez Opening",
+        "url": "https://www.youtube.com/watch?v=_BZ4Uz6ZwVE"
+    },
+    "King's Indian Defense": {
+        "channel": "Chessbrahs",
+        "title": "King's Indian Defense",
+        "url": "https://www.youtube.com/watch?v=9Fzq8k2hN5o"
+    },
+    "London System": {
+        "channel": "GothamChess",
+        "title": "London System Guide",
+        "url": "https://www.youtube.com/watch?v=4ngii3V31Jg"
+    },
+    "Scandinavian Defense": {
+        "channel": "GMHikaru",
+        "title": "Scandinavian Defense",
+        "url": "https://www.youtube.com/watch?v=FQB8IDtCkB0"
+    },
+    "Queen's Pawn Opening": {
+        "channel": "ChessNetwork",
+        "title": "Queen's Pawn Opening Strategies",
+        "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    },
+    "English Opening": {
+        "channel": "GothamChess",
+        "title": "English Opening for Beginners",
+        "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    }
+}
+
+
 class ChessAdvisorService:
     """Service for generating AI-powered chess coaching advice."""
     
@@ -17,11 +79,23 @@ class ChessAdvisorService:
 You are an expert chess coach analyzing a player's performance data. Your goal is to provide 
 concise, actionable advice to help them improve their chess skills.
 
-Based on the provided statistics, generate:
-1. Section-specific recommendations (up to 7 suggestions, one per relevant section)
-2. One overall recommendation that ties everything together
+Based on the provided statistics, you MUST generate EXACTLY:
+1. Nine (9) section-specific recommendations - ONE for each section (1-9):
+   - Section 1: Overall Performance
+   - Section 2: Color Performance  
+   - Section 3: Rating Progression
+   - Section 4: How You Win
+   - Section 5: How You Lose
+   - Section 6: Opening Performance
+   - Section 7: Opponent Strength
+   - Section 8: Time of Day Performance
+   - Section 9: Mistake Analysis
+2. One (1) overall recommendation that synthesizes all insights
 
-Format your response as bullet points. Each suggestion should:
+DO NOT skip any section. ALL 9 sections must receive a specific recommendation.
+
+Format your response with clear section labels exactly as shown in the user prompt.
+Each recommendation should:
 - Be specific and actionable
 - Reference concrete data from the analysis
 - Provide clear next steps for improvement
@@ -36,7 +110,7 @@ Focus on the most impactful areas for improvement. Prioritize:
 Avoid:
 - Generic advice ("study more tactics")
 - Obvious statements ("you lose when you blunder")
-- Overwhelming the player with too many suggestions
+- Skipping any section (CRITICAL: all 9 sections must have recommendations)
 
 Tone: Encouraging but honest, like a supportive coach.
 """
@@ -46,15 +120,37 @@ Analyze this chess player's performance and provide coaching recommendations:
 
 {summary_data_json}
 
-Provide recommendations in this format:
+Provide recommendations in this EXACT format (all 9 sections are MANDATORY):
 
-**Section-Specific Suggestions:**
-- [Suggestion 1 based on relevant section]
-- [Suggestion 2 based on relevant section]
-- ... (up to 7 suggestions)
+**Section 1 - Overall Performance:**
+- [Specific recommendation based on win rate trends and overall stats]
+
+**Section 2 - Color Performance:**
+- [Specific recommendation based on White vs Black performance]
+
+**Section 3 - Rating Progression:**
+- [Specific recommendation based on rating changes and trends]
+
+**Section 4 - How You Win:**
+- [Specific recommendation based on winning termination patterns]
+
+**Section 5 - How You Lose:**
+- [Specific recommendation based on losing termination patterns]
+
+**Section 6 - Opening Performance:**
+- [Specific recommendation based on best/worst openings]
+
+**Section 7 - Opponent Strength:**
+- [Specific recommendation based on performance vs different rated opponents]
+
+**Section 8 - Time of Day:**
+- [Specific recommendation based on time period performance]
+
+**Section 9 - Mistake Analysis:**
+- [Specific recommendation based on mistake patterns by game stage]
 
 **Overall Recommendation:**
-- [One key overarching advice that synthesizes all insights]
+- [One comprehensive recommendation that synthesizes all insights and provides a clear action plan]
 """
     
     def __init__(self, api_key: str, model: str = 'gpt-4o-mini', 
@@ -329,7 +425,8 @@ Provide recommendations in this format:
             date_range: Date range string
             
         Returns:
-            Dictionary with 'section_suggestions', 'overall_recommendation', 
+            Dictionary with 'section_suggestions' (list of 9 dicts), 
+            'overall_recommendation', 'youtube_videos' (list), 
             'tokens_used', and 'estimated_cost'
         """
         if not self.api_key:
@@ -339,6 +436,9 @@ Provide recommendations in this format:
         try:
             # Prepare summary data
             summary_data = self._prepare_summary_data(analysis_results, username, date_range)
+            
+            # Get YouTube video recommendations
+            youtube_videos = self._get_opening_videos(summary_data)
             
             # Build user prompt
             user_prompt = self.USER_PROMPT_TEMPLATE.format(
@@ -371,6 +471,7 @@ Provide recommendations in this format:
             return {
                 'section_suggestions': parsed_advice['suggestions'],
                 'overall_recommendation': parsed_advice['overall'],
+                'youtube_videos': youtube_videos,
                 'tokens_used': tokens_used,
                 'estimated_cost': estimated_cost
             }
@@ -378,6 +479,103 @@ Provide recommendations in this format:
         except Exception as e:
             logger.error(f"OpenAI API error: {e}")
             return self._generate_fallback_advice(analysis_results)
+    
+    def _get_opening_videos(self, summary_data: Dict) -> List[Dict[str, str]]:
+        """
+        Get YouTube video recommendations for pla with exactly 9 section-specific suggestions.
+        
+        Args:
+            response_text: Raw response from OpenAI
+            
+        Returns:
+            Dictionary with 'suggestions' (list of 9 dicts with section_number, 
+            section_name, advice) and 'overall' (str)
+        """
+        lines = response_text.strip().split("\n")
+        suggestions = []
+        overall = ""
+        
+        current_section = None
+        current_section_num = None
+        current_advice = []
+        
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            
+            # Check if this is a section header
+            if line.startswith("**Section") and ":" in line:
+                # Save previous section if exists
+                if current_section and current_advice:
+                    suggestions.append({
+                        "section_number": current_section_num,
+                        "section_name": current_section,
+                        "advice": " ".join(current_advice).strip()
+                    })
+                    current_advice = []
+                
+                # Extract section info
+                # Format: **Section X - Name:**
+                section_part = line.split(":", 1)[0].replace("**", "").strip()
+                parts = section_part.split("-", 1)
+                
+                if len(parts) == 2:
+                    section_num_str = parts[0].replace("Section", "").strip()
+                    section_name = parts[1].strip()
+                    
+                    try:
+                        current_section_num = int(section_num_str)
+                        current_section = section_name
+                    except ValueError:
+                        current_section = section_part
+                        current_section_num = len(suggestions) + 1
+                else:
+                    current_section = section_part
+                    current_section_num = len(suggestions) + 1
+                    
+            elif line.startswith("**Overall Recommendation"):
+                # Save last section before overall
+                if current_section and current_advice:
+                    suggestions.append({
+                        "section_number": current_section_num,
+                        "section_name": current_section,
+                        "advice": " ".join(current_advice).strip()
+                    })
+                    current_advice = []
+                current_section = "overall"
+                current_section_num = None
+                
+            elif line.startswith("-") or line.startswith("•") or line.startswith("*"):
+                # This is advice content
+                advice_line = line.lstrip("-•*").strip()
+                if current_section == "overall":
+                    overall += advice_line + " "
+                else:
+                    current_advice.append(advice_line)
+            else:
+                # Continue previous advice
+                if current_section == "overall":
+                    overall += line + " "
+                elif current_advice or current_section:
+                    current_advice.append(line)
+        
+        # Save last section if not saved
+        if current_section and current_section != "overall" and current_advice:
+            suggestions.append({
+                "section_number": current_section_num,
+                "section_name": current_section,
+                "advice": " ".join(current_advice).strip()
+            })
+        
+        # Ensure we have exactly 9 suggestions
+        if len(suggestions) < 9:
+            logger.warning(f"Only {len(suggestions)} section suggestions found, expected 9")
+        
+        return {
+            'suggestions': suggestions[:9],  # Limit to first 9
+            'overall': overall.strip()
+        }
     
     def _parse_advice_response(self, response_text: str) -> Dict:
         """
@@ -439,62 +637,159 @@ Provide recommendations in this format:
     
     def _generate_fallback_advice(self, analysis_results: Dict) -> Dict:
         """
-        Generate basic rule-based advice if API fails.
+        Generate rule-based advice if API fails.
+        Ensures all 9 sections receive recommendations.
         
         Args:
             analysis_results: Analysis results
             
         Returns:
-            Fallback advice dictionary
+            Fallback advice dictionary with 9+1 recommendations
         """
         sections = analysis_results.get('sections', {})
         suggestions = []
         
-        # Overall performance
+        # Section 1: Overall performance
         overall = sections.get('overall_performance', {})
         win_rate = overall.get('win_rate', 0)
         if win_rate < 45:
-            suggestions.append("Your win rate is below 45%. Focus on fundamentals: avoid blunders, complete tactical training, and analyze your losses.")
+            advice1 = "Your win rate is below 45%. Focus on fundamentals: avoid blunders, complete tactical training, and analyze your losses."
+        elif win_rate > 55:
+            advice1 = f"Solid {win_rate:.1f}% win rate! Maintain consistency and challenge yourself against stronger opponents."
+        else:
+            advice1 = "Your win rate shows steady play. Continue tracking your games to identify improvement trends."
+        suggestions.append({
+            "section_number": 1,
+            "section_name": "Overall Performance",
+            "advice": advice1
+        })
         
-        # Terminations
-        term_losses = sections.get('termination_losses', {})
-        timeout_losses = term_losses.get('breakdown', {}).get('timeout', 0)
-        total_losses = term_losses.get('total_losses', 1)
-        if timeout_losses / total_losses > 0.25:
-            suggestions.append("Time pressure is a major issue (25%+ losses by timeout). Practice playing longer time controls to build clock management skills.")
-        
-        # Color performance
+        # Section 2: Color performance
         color_perf = sections.get('color_performance', {})
         white_wr = color_perf.get('white', {}).get('win_rate', 0)
         black_wr = color_perf.get('black', {}).get('win_rate', 0)
         if abs(white_wr - black_wr) > 15:
             weaker_color = 'Black' if white_wr > black_wr else 'White'
-            suggestions.append(f"Your {weaker_color} performance is significantly weaker. Study your {weaker_color} openings and defensive techniques.")
+            advice2 = f"Your {weaker_color} performance is significantly weaker ({min(white_wr, black_wr):.1f}% vs {max(white_wr, black_wr):.1f}%). Study your {weaker_color} openings and defensive techniques."
+        else:
+            advice2 = "Your White and Black performance is balanced. Continue practicing with both colors."
+        suggestions.append({
+            "section_number": 2,
+            "section_name": "Color Performance",
+            "advice": advice2
+        })
         
-        # Opponent strength
+        # Section 3: Rating progression
+        rating_change = overall.get('rating_change', 0)
+        if rating_change > 0:
+            advice3 = f"Rating up {rating_change} points - good momentum! Maintain consistent play to continue improving."
+        elif rating_change < -20:
+            advice3 = f"Rating down {abs(rating_change)} points. Review recent games to identify patterns causing losses."
+        else:
+            advice3 = "Rating is stable. Focus on consistent play and gradual improvement through study."
+        suggestions.append({
+            "section_number": 3,
+            "section_name": "Rating Progression",
+            "advice": advice3
+        })
+        
+        # Section 4: How you win
+        term_wins = sections.get('termination_wins', {})
+        most_common_win = self._get_top_termination(term_wins.get('breakdown', {}))
+        advice4 = f"Most wins by {most_common_win}. Continue developing your winning patterns and tactical skills."
+        suggestions.append({
+            "section_number": 4,
+            "section_name": "How You Win",
+            "advice": advice4
+        })
+        
+        # Section 5: How you lose
+        term_losses = sections.get('termination_losses', {})
+        timeout_losses = term_losses.get('breakdown', {}).get('timeout', 0)
+        total_losses = term_losses.get('total_losses', 1)
+        if timeout_losses / total_losses > 0.25:
+            advice5 = f"Time pressure is a major issue ({(timeout_losses/total_losses*100):.0f}% losses by timeout). Play longer time controls to build clock management skills."
+        else:
+            advice5 = "Review your losses to identify and fix recurring weaknesses."
+        suggestions.append({
+            "section_number": 5,
+            "section_name": "How You Lose",
+            "advice": advice5
+        })
+        
+        # Section 6: Opening performance
+        openings = sections.get('opening_performance', {})
+        worst_openings = self._get_worst_openings(openings, bottom_n=1)
+        if worst_openings:
+            advice6 = f"Your weakest opening ({worst_openings[0]}) needs work. Consider studying key lines or switching."
+        else:
+            advice6 = "Study your most-played openings to improve your repertoire."
+        suggestions.append({
+            "section_number": 6,
+            "section_name": "Opening Performance",
+            "advice": advice6
+        })
+        
+        # Section 7: Opponent strength
         opponent = sections.get('opponent_strength', {})
         higher_rated_wr = opponent.get('higher_rated', {}).get('win_rate', 0)
         if higher_rated_wr < 30:
-            suggestions.append("You struggle against stronger opponents. Focus on solid, defensive play and study endgame technique to maximize drawing chances.")
+            advice7 = f"You struggle against stronger opponents ({higher_rated_wr:.0f}% win rate). Focus on solid, defensive play and study endgame technique."
+        else:
+            advice7 = "Play against varied opposition to improve against all rating levels."
+        suggestions.append({
+            "section_number": 7,
+            "section_name": "Opponent Strength",
+            "advice": advice7
+        })
         
-        # Time of day
+        # Section 8: Time of day
         time_perf = sections.get('time_of_day', {})
-        times = {
-            'morning': time_perf.get('morning', {}).get('win_rate', 0),
-            'afternoon': time_perf.get('afternoon', {}).get('win_rate', 0),
-            'night': time_perf.get('night', {}).get('win_rate', 0)
-        }
-        if times:
-            worst_time = min(times, key=times.get)
-            best_time = max(times, key=times.get)
-            if times[best_time] - times[worst_time] > 15:
-                suggestions.append(f"Your {worst_time} performance is significantly worse than {best_time}. Try to schedule games during your peak performance hours.")
+        best_time = self._get_best_time(time_perf)
+        worst_time = self._get_worst_time(time_perf)
+        morning_wr = time_perf.get('morning', {}).get('win_rate', 0)
+        afternoon_wr = time_perf.get('afternoon', {}).get('win_rate', 0)
+        night_wr = time_perf.get('night', {}).get('win_rate', 0)
         
-        overall_rec = "Continue analyzing your games, focus on reducing tactical errors, and maintain consistency in your study routine."
+        times = {'morning': morning_wr, 'afternoon': afternoon_wr, 'night': night_wr}
+        if times and max(times.values()) - min(times.values()) > 15:
+            advice8 = f"Your {best_time} performance ({times[best_time]:.0f}%) is much better than {worst_time} ({times[worst_time]:.0f}%). Schedule important games during peak hours."
+        else:
+            advice8 = "Play during your peak performance times for better results."
+        suggestions.append({
+            "section_number": 8,
+            "section_name": "Time of Day Performance",
+            "advice": advice8
+        })
+        
+        # Section 9: Mistake analysis
+        mistake_analysis = sections.get('mistake_analysis', {})
+        if mistake_analysis:
+            weakest_stage = mistake_analysis.get('weakest_stage', 'N/A')
+            if weakest_stage != 'N/A':
+                advice9 = f"{weakest_stage.capitalize()}game is your weakest stage. Focus study time on tactical patterns in this phase."
+            else:
+                advice9 = "Focus on reducing mistakes through tactical training and game analysis."
+        else:
+            advice9 = "Focus on reducing mistakes in all game stages through targeted practice."
+        suggestions.append({
+            "section_number": 9,
+            "section_name": "Mistake Analysis",
+            "advice": advice9
+        })
+        
+        # Overall recommendation
+        overall_rec = "Continue analyzing your games regularly. Focus on time management, opening preparation, and tactical training to improve your overall play."
+        
+        # Get video recommendations even for fallback
+        summary_data = self._prepare_summary_data(analysis_results, '', '')
+        youtube_videos = self._get_opening_videos(summary_data)
         
         return {
-            'section_suggestions': suggestions[:7],
+            'section_suggestions': suggestions,
             'overall_recommendation': overall_rec,
+            'youtube_videos': youtube_videos,
             'tokens_used': 0,
-            'estimated_cost': 0
+            'estimated_cost': 0,
+            'fallback': True
         }

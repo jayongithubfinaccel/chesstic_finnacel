@@ -37,7 +37,8 @@ Flask-based chess analytics website that pulls data from Chess.com API. Users en
 - `templates/` - HTML templates
 - `tests/` - Test files including Playwright tests
 - `.github/agents/` - AI agent configurations
-- `.github/docs/[project_name]` - prd_[project_name].md` created from prd-agent.md
+- `.github/docs/[project_name]` - project folders
+- `.github/docs/[project_name] - prd_[project_name].md` created from prd-agent.md
 - `.github/docs/[project_name]/milestone_progress.md` and per-milestone progress files
 - `.github/docs/[project_name]/bug_fixes.md/` - bug_fixes.md created from bugfixes done
 - `.github/docs/[project_name]/documentation.md` - documentation of all changes made

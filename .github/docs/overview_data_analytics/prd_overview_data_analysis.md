@@ -23,6 +23,235 @@ The system will fetch game data from the Chess.com Public API, process and analy
 
 ---
 
+# PRD change history
+
+This section tracks all iterations and modifications to the PRD document. Engineers should review this section to understand the latest changes and their context.
+
+## Iteration 3 - December 26, 2025
+
+**Version:** 2.1  
+**Focus:** UI refinements, data enhancements, and YouTube integration
+
+### Changes Summary
+
+**Section 6 - Opening Performance Analysis (EA-006):**
+- **Changed:** Removed "Top 5" restriction from opening display headings
+  - **Old:** "Top 5 Best Openings" / "Top 5 Worst Openings"
+  - **New:** "Top Best Openings" / "Top Worst Openings" (dynamic count)
+  - **Rationale:** Flexible display when fewer than 5 openings meet criteria
+- **Added:** First 6 chess moves display requirement
+  - Display moves in standard chess notation (e.g., "1. e4 e5 2. Nf3 Nc6 3. Bb5")
+  - Shows moves for each opening listed in top best/worst categories
+- **Added:** Interactive chess board display
+  - Visual board showing position after move 6 for each opening
+  - Helps users visualize and learn opening positions
+- **Updated:** Acceptance criteria to reflect dynamic count and new display requirements
+
+**Section 8 - Time of Day Performance (EA-008):**
+- **Enhanced:** Timezone conversion verification requirements
+  - Added explicit requirement for backend to receive timezone parameter
+  - Emphasized UTC to user local timezone conversion before categorization
+  - Added requirement for timezone display in Section 8 header
+  - Added manual testing requirements across multiple timezones (EST, PST, GMT+8)
+  - **Rationale:** Ensure accurate time-based analysis for users worldwide
+- **Updated:** Acceptance criteria with specific timezone verification checkpoints
+- **Status:** Changed critical timezone-related criteria from completed to pending verification
+
+**Section 9 - Mistake Analysis by Game Stage (EA-018):**
+- **Refined:** Critical mistake game link selection criteria
+  - **Old:** "Link to game with biggest blunder in this stage"
+  - **New:** Must meet ALL criteria:
+    * Player LOST the game (not won, not drawn)
+    * Game ended by RESIGNATION (not timeout or abandonment)
+    * Contains biggest CP drop in stage across qualifying games
+    * CP drop must be "significant" (threshold determined from data analysis)
+    * Link opens game on Chess.com at exact mistake position
+  - **Rationale:** Provide most relevant examples for learning from mistakes
+- **Added:** Algorithm requirement to determine "significant" CP drop threshold from data
+- **Added:** Fallback display "No qualifying game" when no games meet all criteria
+- **Updated:** Acceptance criteria with detailed game link requirements
+- **Updated:** Test case TC-021 to verify new criteria
+
+**Section 10 - AI Chess Advisor (EA-019):**
+- **Restructured:** Recommendation format from flexible to fixed structure
+  - **Old:** "Up to 7 section-specific suggestions" + 1 overall
+  - **New:** EXACTLY 9 section-specific recommendations (one per section 1-9) + 1 overall
+  - **Rationale:** Ensure comprehensive coverage of all analytics sections
+- **Added:** YouTube video integration for opening tutorials
+  - Video source prioritization: ChessNetwork > GMHikaru > GothamChess > Chessbrahs
+  - Show 1 video recommendation per frequently-played opening (3+ games)
+  - Implementation options: Curated database (recommended) OR YouTube/Google API search
+  - Video format: "[Opening Name]: [Video Title] by [Channel] - [Watch Link]"
+- **Updated:** System prompt to generate exactly 9+1 recommendations with clear section labels
+- **Updated:** User prompt template with specific format for all 9 sections + overall
+- **Updated:** Token budget from 500 to 800 (cost estimate: $0.008-$0.012, still under target)
+- **Added:** Rate limiting for YouTube API if used (max 100 searches/day)
+- **Updated:** UI mockup to show structured 9+1 format with video links
+- **Updated:** Acceptance criteria with YouTube integration requirements
+- **Updated:** Test cases TC-024 and TC-025 to verify 9+1 structure and video links
+- **Updated:** EA-019 user story acceptance criteria
+
+**Testing Updates:**
+- **Modified:** TC-018 to verify dynamic opening count and chess notation display
+- **Enhanced:** TC-024 to verify exact count of 9+1 recommendations with section labels
+- **Enhanced:** TC-025 to verify YouTube video recommendations and channel priority
+
+**Documentation:**
+- **Updated:** Document version from 2.0 to 2.1
+- **Updated:** "Last Updated" date to December 26, 2025
+- **Added:** Changelog entry for version 2.1
+
+### Implementation Notes for Engineers
+
+**Priority 1 - Section 10 (AI Advisor):**
+- Requires OpenAI API integration updates (system and user prompts)
+- YouTube video database creation OR API integration needed
+- Parser updates for structured 9+1 response format
+- Frontend UI updates for new display structure
+
+**Priority 2 - Section 9 (Mistake Analysis):**
+- Filter algorithm for game selection (lost by resignation only)
+- CP drop threshold calculation from data distribution
+- Game link generation with position parameters
+
+**Priority 3 - Section 6 (Opening Performance):**
+- Remove hardcoded "5" from UI labels
+- Chess notation formatting for first 6 moves
+- Chess board component integration (interactive display)
+
+**Priority 4 - Section 8 (Time of Day):**
+- Verification testing across multiple timezones
+- Ensure timezone parameter flows from frontend to backend
+- Add timezone display to Section 8 UI header
+
+---
+
+## Iteration 2 - December 12, 2025
+
+**Version:** 2.0  
+**Focus:** Advanced analysis features with AI/ML integration
+
+### Changes Summary
+
+**New Milestone Added: Milestone 8 - Game Stage Mistake Analysis**
+- **Added:** Section 9 - Mistake Analysis by Game Stage (EA-018)
+  - Chess engine integration using Stockfish 15+
+  - Mistake classification: Inaccuracies (50-100 CP), Mistakes (100-200 CP), Blunders (200+ CP)
+  - Game stage categorization: Early (1-7 moves), Middle (8-20 moves), Endgame (21+ moves)
+  - Missed opportunity detection
+  - Performance optimization with caching and parallel processing
+  - Table visualization with critical mistake game links
+- **Added:** Test cases TC-021, TC-022, TC-023 for engine analysis functionality
+
+**New Milestone Added: Milestone 9 - AI-Powered Chess Advisor**
+- **Added:** Section 10 - AI Chess Advisor Recommendations (EA-019)
+  - OpenAI GPT-4-turbo API integration
+  - Personalized coaching advice based on all 9 sections
+  - Summary data preparation (no raw PGN sent)
+  - System prompt design for expert chess coach persona
+  - Cost control: <$0.01 per analysis target
+  - Caching strategy (1-hour TTL)
+  - Fallback to rule-based advice on API failure
+- **Added:** Test cases TC-024 through TC-030 for AI advisor functionality
+
+**Tech Stack Updates:**
+- **Added:** `python-chess` library for Stockfish integration
+- **Added:** `openai` Python library for GPT-4 API
+- **Added:** Stockfish chess engine (local installation)
+- **Added:** Redis recommendation for caching engine analysis and AI advice
+- **Added:** Multiprocessing for parallel game analysis
+
+**System Architecture Updates:**
+- **Added:** Mistake Analysis Engine component
+- **Added:** Stockfish Engine integration
+- **Added:** AI Advisor Service component
+- **Added:** OpenAI GPT-4 API integration
+- **Updated:** Cache layer to include engine analysis and AI advice
+
+**Success Metrics Updates:**
+- **Added:** API response time target: <10 seconds (including engine analysis)
+- **Added:** Stockfish analysis accuracy validation requirement
+- **Added:** AI advisor relevance assessment (qualitative)
+- **Added:** AI API cost metric: <$0.01 per analysis
+- **Updated:** Total test cases from 20 to 30
+
+**Documentation:**
+- **Updated:** Document version from 1.0 to 2.0
+- **Updated:** Total sections from 8 to 10
+- **Updated:** "Last Updated" date to December 12, 2025
+
+---
+
+## Iteration 1 - December 5-6, 2025
+
+**Version:** 1.0  
+**Focus:** Core analytics infrastructure and UI enhancements
+
+### Initial PRD Creation (December 5, 2025)
+
+**Milestones 1-6 Defined:**
+- Milestone 1: Core analytics infrastructure and data processing
+- Milestone 2: Backend API endpoints
+- Milestone 3: Frontend dashboard UI foundation
+- Milestone 4: Analytics visualizations - Part 1 (Sections 1-3)
+- Milestone 5: Analytics visualizations - Part 2 (Sections 4-6)
+- Milestone 6: Analytics visualizations - Part 3 (Sections 7-8)
+
+**Initial Sections (EA-001 through EA-012):**
+- Section 1: Overall performance over time
+- Section 2: Color performance over time
+- Section 3: Elo rating progression
+- Section 4: How I win games (termination types)
+- Section 5: How I lose games (termination types)
+- Section 6: Opening performance analysis
+- Section 7: Opponent strength analysis
+- Section 8: Time of day performance
+
+**Test Cases Defined:**
+- TC-001 through TC-014: Core analytics workflow and visualization tests
+
+### Milestone 7 Added (December 6, 2025)
+
+**UI Enhancement and Visualization Updates:**
+- **Modified:** Section 1 (EA-013) - Simplified to single win rate line chart
+- **Modified:** Section 2 (EA-014) - Unified White/Black performance in single chart with summary cards
+- **Enhanced:** Sections 4 & 5 (EA-015) - Added count labels inside pie chart segments
+- **Enhanced:** Section 6 (EA-016) - Integrated Lichess Opening Database for human-readable names
+- **Simplified:** Sections 7 & 8 (EA-017) - Replaced bar charts with card-based display
+
+**Test Cases Added:**
+- TC-015 through TC-020: UI enhancement verification tests
+
+**Milestone Completion:**
+- Marked Milestones 1-6 as completed (December 6, 2025)
+- Marked Milestone 7 as completed (December 6, 2025)
+
+**File Naming:**
+- Renamed from initial draft to `prd_overview_data_analysis.md`
+
+---
+
+## How to Use This Section
+
+**For Engineers:**
+1. Always check this section first when returning to the PRD
+2. Review the latest iteration to understand recent changes
+3. Pay attention to "Implementation Notes" for priority guidance
+4. Check "Rationale" fields to understand why changes were made
+
+**For Product Managers:**
+1. Document all PRD changes in this section immediately after approval
+2. Include clear before/after comparisons for modified requirements
+3. Provide rationale for significant changes
+4. Link to relevant discussions or decisions
+
+**For QA/Testers:**
+1. Review changed sections to update test plans
+2. Check test case modifications (TC-XXX references)
+3. Verify acceptance criteria updates
+
+---
+
 # Key features
 
 ## Milestone 1: Core analytics infrastructure and data processing
@@ -286,9 +515,12 @@ The system will fetch game data from the Chess.com Public API, process and analy
 * Identify opening names using chess opening database/library
 * Calculate win rate for each opening (minimum 3 games threshold)
 * Display two lists:
-  * Top 5 best performing openings (highest win rate)
-  * Top 5 worst performing openings (lowest win rate)
+  * Top best performing openings (highest win rate)
+  * Top worst performing openings (lowest win rate)
 * Show: Opening name, games played, wins, losses, draws, win rate
+* For each opening, display:
+  * First 6 chess moves in standard notation (e.g., "1. e4 e5 2. Nf3 Nc6 3. Bb5")
+  * Interactive chess board showing position after move 6
 * Horizontal bar chart for visual comparison
 
 **Technical notes:**
@@ -314,7 +546,9 @@ The system will fetch game data from the Chess.com Public API, process and analy
 - [x] Less than 15% of games categorized as "Unknown Opening"
 - [x] Win rates are calculated correctly (wins / total games)
 - [x] Only openings with 3+ games are included in rankings
-- [x] Top 5 best and worst openings are displayed
+- [ ] Top best and worst openings are displayed (dynamic count based on data)
+- [ ] First 6 moves displayed in standard chess notation for each opening
+- [ ] Interactive chess board showing position after 6 moves for each opening
 - [x] Visual representation (bar chart) is clear
 - [x] Games played count is shown for each opening
 
@@ -386,15 +620,19 @@ The system will fetch game data from the Chess.com Public API, process and analy
 * Consider daylight saving time changes
 
 **Acceptance criteria:**
-- [x] Game timestamps are converted to user's timezone
-- [x] Games are categorized correctly into time periods
+- [ ] Game timestamps are converted to user's timezone (CRITICAL: verify implementation)
+- [ ] Backend receives timezone parameter from frontend
+- [ ] All game timestamps converted from UTC to user timezone before categorization
+- [ ] Time period categorization uses converted local time (not UTC)
+- [ ] Games are categorized correctly into time periods based on LOCAL time
 - [x] Win rates are calculated for each time period
 - [x] Three card grid layout displays data clearly (no bar chart)
 - [x] Each card shows: games played, W/L/D counts, win rate %
 - [x] Game distribution (how many games in each period) is visible
 - [x] User can see their best and worst performing times
-- [x] Timezone is displayed clearly to user
+- [ ] Timezone is displayed clearly to user in Section 8 header
 - [x] Handles edge cases (games exactly at boundary times)
+- [ ] Manual verification: test with different timezones (EST, PST, GMT+8) to confirm correct categorization
 
 ---
 
@@ -656,7 +894,10 @@ def identify_opening(pgn_string):
 * Verify Section 6 shows human-readable opening names
 * Verify no ECO codes are displayed
 * Verify "Unknown Opening" count is less than 15% of total games
-* Verify top 5 best and worst openings have proper names
+* Verify top best and worst openings have proper names (count varies based on data)
+* Verify first 6 moves displayed in standard notation for each opening
+* Verify chess board position shown for each opening (after move 6)
+* Verify board displays are interactive and accurate
 
 **TC-019: Simplified opponent strength display**
 * Complete analysis workflow
@@ -745,7 +986,12 @@ This milestone introduces comprehensive mistake analysis across different game s
 * **Inaccuracies/Mistakes/Blunders:** Count of each error type
 * **Missed Opportunities:** Times opponent blundered but player didn't capitalize
 * **Avg CP Loss:** Average centipawn loss per mistake in this stage
-* **Critical Mistakes:** Link to game with biggest blunder in this stage
+* **Critical Mistakes:** Link to game meeting ALL criteria:
+  - Player LOST the game (not won, not drawn)
+  - Game ended by RESIGNATION (not timeout, not abandonment)
+  - Contains the biggest CP drop in this stage across all qualifying games
+  - CP drop must be significant (determined from data analysis - typically 300+ centipawns)
+  - Link opens game on Chess.com at the position where the critical mistake occurred
 
 **Visual summary card:**
 * "Your weakest stage: [Middle game]" (stage with highest mistake rate)
@@ -870,7 +1116,12 @@ def aggregate_mistake_analysis(games_data):
 - [ ] Centipawn loss calculated accurately
 - [ ] Missed opportunities detected (opponent mistake + player's response)
 - [ ] Table displays all required columns with accurate data
-- [ ] Links to critical mistake games work correctly
+- [ ] Critical mistake game links meet ALL criteria:
+  * Player lost by resignation (filtered out timeouts/abandonment)
+  * Biggest CP drop in stage (threshold determined from data analysis)
+  * Link opens Chess.com game at mistake position
+- [ ] Algorithm determines "significant" CP drop threshold from data distribution
+- [ ] If no qualifying game found for a stage, display "No qualifying game" instead of link
 - [ ] Average CP loss calculated per stage
 - [ ] Visual summary identifies weakest stage
 - [ ] Engine analysis cached to avoid re-analysis
@@ -973,11 +1224,20 @@ SYSTEM_PROMPT = """
 You are an expert chess coach analyzing a player's performance data. Your goal is to provide 
 concise, actionable advice to help them improve their chess skills.
 
-Based on the provided statistics, generate:
-1. Section-specific recommendations (up to 7 suggestions, one per relevant section)
-2. One overall recommendation that ties everything together
+Based on the provided statistics, generate EXACTLY:
+1. Nine (9) section-specific recommendations - ONE for each section (1-9):
+   - Section 1: Overall Performance
+   - Section 2: Color Performance  
+   - Section 3: Rating Progression
+   - Section 4: How You Win
+   - Section 5: How You Lose
+   - Section 6: Opening Performance
+   - Section 7: Opponent Strength
+   - Section 8: Time of Day Performance
+   - Section 9: Mistake Analysis
+2. One (1) overall recommendation that synthesizes all insights
 
-Format your response as bullet points. Each suggestion should:
+Format your response with clear section labels. Each recommendation should:
 - Be specific and actionable
 - Reference concrete data from the analysis
 - Provide clear next steps for improvement
@@ -992,7 +1252,7 @@ Focus on the most impactful areas for improvement. Prioritize:
 Avoid:
 - Generic advice ("study more tactics")
 - Obvious statements ("you lose when you blunder")
-- Overwhelming the player with too many suggestions
+- Skipping any section (all 9 sections must have a recommendation)
 
 Tone: Encouraging but honest, like a supportive coach.
 """
@@ -1002,15 +1262,38 @@ Analyze this chess player's performance and provide coaching recommendations:
 
 {summary_data_json}
 
-Provide recommendations in this format:
+Provide recommendations in this EXACT format:
 
-**Section-Specific Suggestions:**
-- [Suggestion 1 based on relevant section]
-- [Suggestion 2 based on relevant section]
-- ... (up to 7 suggestions)
+**Section 1 - Overall Performance:**
+- [Specific recommendation based on win rate trends and overall stats]
+
+**Section 2 - Color Performance:**
+- [Specific recommendation based on White vs Black performance]
+
+**Section 3 - Rating Progression:**
+- [Specific recommendation based on rating changes and trends]
+
+**Section 4 - How You Win:**
+- [Specific recommendation based on winning termination patterns]
+
+**Section 5 - How You Lose:**
+- [Specific recommendation based on losing termination patterns]
+
+**Section 6 - Opening Performance:**
+- [Specific recommendation based on best/worst openings]
+- [YouTube Video]: [Opening name] - [Video title or link placeholder]
+
+**Section 7 - Opponent Strength:**
+- [Specific recommendation based on performance vs different rated opponents]
+
+**Section 8 - Time of Day:**
+- [Specific recommendation based on time period performance]
+
+**Section 9 - Mistake Analysis:**
+- [Specific recommendation based on mistake patterns by game stage]
 
 **Overall Recommendation:**
-- [One key overarching advice that synthesizes all insights]
+- [One comprehensive recommendation that synthesizes all insights and provides a clear action plan]
 """
 ```
 
@@ -1140,12 +1423,54 @@ class ChessAdvisorService:
         }
 ```
 
+**YouTube video recommendations:**
+* Integrate YouTube video links for opening-specific learning
+* For player's most frequently played openings (top 3-5), provide educational video links
+* **Video source prioritization (highest to lowest):**
+  1. ChessNetwork
+  2. GMHikaru  
+  3. GothamChess (Levy Rozman)
+  4. Chessbrahs
+* **Implementation approach:**
+  * **Option 1 (Recommended):** Curated database/config file
+    - Create JSON/YAML config mapping opening names to YouTube video URLs
+    - Manually curate high-quality instructional videos
+    - Regularly update with new content
+    - Fast, reliable, no API costs
+  * **Option 2:** Google/YouTube API search
+    - Use YouTube Data API v3 to search for videos
+    - Search query: "[opening_name] tutorial [prioritized_channel]"
+    - Cache results to minimize API calls
+    - Fallback to lower priority channels if no results
+* Show 1 video recommendation per opening
+* Video recommendation format: "[Opening Name]: [Video Title] by [Channel] - [Watch Link]"
+* Only show videos for openings player frequently uses (3+ games)
+
+**Example curated video database structure:**
+```json
+{
+  "Sicilian Defense": {
+    "channel": "ChessNetwork",
+    "title": "Sicilian Defense - Introduction",
+    "url": "https://youtube.com/watch?v=...",
+    "duration": "15:30"
+  },
+  "Italian Game": {
+    "channel": "GMHikaru",
+    "title": "The Italian Game Explained",
+    "url": "https://youtube.com/watch?v=...",
+    "duration": "12:45"
+  }
+}
+```
+
 **Rate limiting and cost control:**
-* Max tokens per request: 500 (limits output length)
+* Max tokens per request: 800 (increased to accommodate 9+1 recommendations)
 * Cache AI advice for same analysis parameters (1 hour TTL)
-* Estimated cost per analysis: $0.005-$0.01 (well under 1 cent target)
+* Estimated cost per analysis: $0.008-$0.012 (still under 1 cent target with increased tokens)
 * Monitor monthly API costs, implement usage alerts
 * Fallback to rule-based advice if API quota exceeded
+* If using YouTube API: max 100 searches per day (stay within free tier)
 
 **Frontend implementation:**
 
@@ -1154,41 +1479,64 @@ class ChessAdvisorService:
 **UI design:**
 ```
 ┌─────────────────────────────────────────────┐
-│ 🤖 AI Chess Coach Recommendations          │
+│ 🤖 AI Chess Coach - Personalized Analysis  │
 │                                             │
 │ Based on your 150 games from Jan-Mar 2025  │
 │                                             │
-│ 📋 Key Suggestions:                         │
-│   • Your timeout losses (35%) suggest time │
-│     management issues. Practice playing    │
-│     increment time controls to build clock │
-│     awareness.                              │
+│ 📊 Section 1 - Overall Performance:         │
+│   • Your 52% win rate shows steady play.   │
+│     Focus on converting drawn positions    │
+│     to capitalize on improving trend.      │
 │                                             │
-│   • You lose 78% of games against higher   │
-│     rated opponents. Study defensive       │
-│     techniques and focus on solid play.    │
+│ ♟️ Section 2 - Color Performance:           │
+│   • White (54% WR) outperforms Black (50%)│
+│     Strengthen Black repertoire with solid │
+│     defenses like Caro-Kann or Petroff.    │
 │                                             │
-│   • Middlegame is your weakest phase (69   │
-│     mistakes). Solve tactical puzzles      │
-│     focused on moves 10-20.                │
+│ 📈 Section 3 - Rating Progression:          │
+│   • Rating up 25 points - good momentum!   │
+│     Maintain consistency to reach 1550 by  │
+│     next quarter.                           │
 │                                             │
-│   • Night performance (45% WR) is          │
-│     significantly lower than afternoon     │
-│     (58% WR). Avoid playing late if        │
-│     possible.                               │
+│ ✅ Section 4 - How You Win:                 │
+│   • 50% wins by checkmate show strong      │
+│     tactical vision. Keep sharpening!      │
 │                                             │
-│   • Your French Defense has a 30% win rate.│
-│     Consider replacing it with a more      │
-│     reliable opening or study key lines.   │
+│ ❌ Section 5 - How You Lose:                │
+│   • 35% losses by timeout indicate time    │
+│     pressure issues. Play increment games  │
+│     to build clock management skills.      │
+│                                             │
+│ 📖 Section 6 - Opening Performance:         │
+│   • Your French Defense (30% WR) needs     │
+│     work. Consider switching or studying   │
+│     key defensive lines.                    │
+│   📺 Learn: "French Defense Masterclass"   │
+│      by ChessNetwork                        │
+│      👉 [Watch Tutorial]                    │
+│                                             │
+│ 🎯 Section 7 - Opponent Strength:           │
+│   • 38% WR vs higher-rated shows potential │
+│     Study endgame technique for better     │
+│     defense in tough positions.             │
+│                                             │
+│ 🕐 Section 8 - Time of Day:                 │
+│   • Afternoon (58% WR) is your peak time.  │
+│     Schedule important games 2-10pm and    │
+│     avoid late night sessions.              │
+│                                             │
+│ 🔍 Section 9 - Mistake Analysis:            │
+│   • Middlegame (69 mistakes) is weakest    │
+│     phase. Daily tactics puzzles focusing  │
+│     on moves 10-20 will help significantly.│
 │                                             │
 │ 🎯 Overall Recommendation:                  │
-│   • Your biggest lever for improvement is  │
-│     reducing time pressure errors and      │
-│     strengthening your middlegame tactical │
-│     vision. Focus 70% of study time on     │
-│     tactics and 30% on your French Defense │
-│     alternative. Play during afternoon     │
-│     hours when you perform best.           │
+│   • Priority 1: Fix time management (play  │
+│     increment). Priority 2: Improve French │
+│     Defense or switch openings. Priority 3:│
+│     Focus 70% study time on middlegame     │
+│     tactics. Schedule games in afternoon   │
+│     hours for best results.                 │
 │                                             │
 │ [🔄 Regenerate Advice]                      │
 └─────────────────────────────────────────────┘
@@ -1210,21 +1558,29 @@ class ChessAdvisorService:
 - [ ] OpenAI GPT-4-turbo API integrated and working
 - [ ] System prompt produces relevant, actionable advice
 - [ ] Summary data includes all sections (1-9) without raw PGN
-- [ ] API response parsed correctly into bullet points
-- [ ] Section-specific suggestions displayed (up to 7)
-- [ ] Overall recommendation displayed
+- [ ] API response parsed correctly into structured format
+- [ ] EXACTLY 9 section-specific recommendations displayed (one per section)
+- [ ] Section labels clearly identify which section each recommendation addresses
+- [ ] 1 overall recommendation displayed at the end
+- [ ] YouTube video recommendations integrated for player's common openings
+- [ ] Video prioritization implemented: ChessNetwork > GMHikaru > GothamChess > Chessbrahs
+- [ ] 1 video recommendation shown per frequently-played opening (3+ games)
+- [ ] Video links are clickable and open in new tab
+- [ ] Curated video database implemented OR YouTube API search working
+- [ ] If using YouTube API: proper API key management and rate limiting
 - [ ] Advice is specific and references actual player data
 - [ ] Loading state shows during API call (< 10 seconds)
-- [ ] Cost per analysis < $0.01 (verified through monitoring)
+- [ ] Cost per analysis < $0.012 (verified through monitoring)
 - [ ] AI advice cached for 1 hour (same parameters)
-- [ ] Fallback advice works when API fails
+- [ ] Fallback advice works when API fails (includes all 9+1 recommendations)
 - [ ] Error states handled gracefully
 - [ ] Section appears at bottom of dashboard
-- [ ] Regenerate button works (calls API again)
+- [ ] Regenerate button works (calls API again, may get different videos)
 - [ ] Token usage and cost logged for monitoring
 - [ ] Privacy: No raw PGN data sent to OpenAI
 - [ ] Rate limiting prevents excessive API calls
 - [ ] UI is responsive on mobile devices
+- [ ] Video thumbnails display correctly (optional enhancement)
 
 ---
 
@@ -1260,9 +1616,14 @@ class ChessAdvisorService:
 * Verify Section 10 (AI Coach) appears at bottom
 * Verify loading indicator shows "AI Coach is analyzing..."
 * Verify advice appears within 10 seconds
-* Verify section-specific suggestions displayed (up to 7 bullet points)
-* Verify overall recommendation displayed
+* Verify EXACTLY 9 section-specific recommendations displayed
+* Verify each recommendation clearly labeled with section number and name
+* Verify recommendations appear in order (Section 1 through Section 9)
+* Verify 1 overall recommendation displayed at the end
 * Verify advice references actual player data (percentages, numbers)
+* Verify YouTube video links present for player's common openings
+* Verify video links are clickable
+* Count recommendations: should be 9 section-specific + 1 overall = 10 total
 
 **TC-025: AI advisor advice quality**
 * Read all suggestions provided
@@ -1271,6 +1632,12 @@ class ChessAdvisorService:
 * Verify advice is actionable (tells player what to do)
 * Verify no raw PGN data visible in network requests (check DevTools)
 * Verify advice makes sense given the displayed analytics
+* Verify each of 9 sections has received a recommendation
+* Verify no section is skipped or duplicated
+* Verify YouTube video recommendations match player's opening repertoire
+* Verify video channel priority followed (ChessNetwork > GMHikaru > GothamChess > Chessbrahs)
+* Click video link, verify it opens YouTube video in new tab
+* Verify video is relevant to the opening mentioned
 
 **TC-026: AI advisor error handling**
 * Disconnect internet before clicking analyze
@@ -2096,14 +2463,17 @@ After deployment:
 **Acceptance criteria:**
 - [ ] OpenAI GPT-4 API integrated
 - [ ] Summary data includes insights from all sections (no raw PGN)
-- [ ] AI generates section-specific suggestions (up to 7)
-- [ ] AI generates one overall recommendation
+- [ ] AI generates EXACTLY 9 section-specific recommendations (one per section 1-9)
+- [ ] AI generates 1 overall recommendation
+- [ ] Each recommendation clearly labeled with section name
+- [ ] YouTube video links provided for player's frequently-played openings
+- [ ] Video prioritization: ChessNetwork > GMHikaru > GothamChess > Chessbrahs
 - [ ] Advice is specific and actionable
 - [ ] Advice references actual player statistics
-- [ ] Cost per analysis < $0.01
+- [ ] Cost per analysis < $0.012 (updated for increased tokens)
 - [ ] Response time < 10 seconds
 - [ ] Loading state shown during AI processing
-- [ ] Fallback advice works if API fails
+- [ ] Fallback advice works if API fails (includes all 9+1)
 - [ ] AI advice cached for 1 hour
 - [ ] Section appears at bottom of dashboard
 
@@ -2356,15 +2726,26 @@ Not included in this PRD but potential future additions:
 
 ---
 
-**Document Version:** 2.0  
+**Document Version:** 2.1  
 **Created:** December 5, 2025  
-**Last Updated:** December 12, 2025  
+**Last Updated:** December 26, 2025  
 **Author:** PRD Agent  
-**Status:** Updated with Milestones 8-9
+**Status:** Updated with UI refinements and YouTube integration
 
 ---
 
 ## Changelog
+
+**Version 2.1 (December 26, 2025):**
+* Updated Section 6: Changed "Top 5" to dynamic "Top Best/Worst" openings display
+* Updated Section 6: Added chess move notation (first 6 moves) and interactive board display
+* Updated Section 8: Added explicit timezone conversion verification requirements
+* Updated Section 9: Refined critical mistake game link criteria (lost by resignation, significant CP drop)
+* Updated Section 10: Restructured to require EXACTLY 9 section-specific recommendations + 1 overall
+* Updated Section 10: Integrated YouTube video recommendations for opening learning
+* Added video source prioritization: ChessNetwork > GMHikaru > GothamChess > Chessbrahs
+* Updated test cases to verify new requirements
+* Updated acceptance criteria across multiple sections
 
 **Version 2.0 (December 12, 2025):**
 * Added Milestone 8: Game Stage Mistake Analysis (Section 9)

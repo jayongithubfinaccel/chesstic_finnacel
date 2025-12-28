@@ -243,14 +243,14 @@
                     </div>
                     <div class="opening-content">
                         <div class="opening-section">
-                            <h4 class="opening-subtitle">🏆 Top 5 Best Openings</h4>
+                            <h4 class="opening-subtitle" id="bestOpeningsTitle">🏆 Top Best Openings</h4>
                             <div class="chart-container">
                                 <canvas id="bestOpeningsChart"></canvas>
                             </div>
                             <div class="opening-table" id="bestOpeningsTable"></div>
                         </div>
                         <div class="opening-section">
-                            <h4 class="opening-subtitle">⚠️ Top 5 Worst Openings</h4>
+                            <h4 class="opening-subtitle" id="worstOpeningsTitle">⚠️ Top Worst Openings</h4>
                             <div class="chart-container">
                                 <canvas id="worstOpeningsChart"></canvas>
                             </div>
@@ -291,7 +291,7 @@
             <section class="analytics-section">
                 <div class="section-card">
                     <div class="section-header">
-                        <h3>🕐 Time of Day Performance</h3>
+                        <h3>🕐 Time of Day Performance <span id="timezoneDisplay" style="font-size: 0.8em; color: #666;"></span></h3>
                         <p class="section-description">When you play your best chess</p>
                     </div>
                     <div class="time-grid">

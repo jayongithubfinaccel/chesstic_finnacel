@@ -692,11 +692,25 @@ async function renderOpeningPerformance(data) {
     if (!data) return;
     
     if (data.best_openings && data.best_openings.length > 0) {
+        // PRD v2.1: Dynamically set title with count
+        const bestCount = data.best_openings.length;
+        const bestTitle = document.getElementById('bestOpeningsTitle');
+        if (bestTitle) {
+            bestTitle.textContent = `🏆 Top ${bestCount > 1 ? bestCount : ''} Best Opening${bestCount > 1 ? 's' : ''}`;
+        }
+        
         renderOpeningsChart('bestOpeningsChart', data.best_openings, true);
         renderOpeningsTable('bestOpeningsTable', data.best_openings);
     }
     
     if (data.worst_openings && data.worst_openings.length > 0) {
+        // PRD v2.1: Dynamically set title with count
+        const worstCount = data.worst_openings.length;
+        const worstTitle = document.getElementById('worstOpeningsTitle');
+        if (worstTitle) {
+            worstTitle.textContent = `⚠️ Top ${worstCount > 1 ? worstCount : ''} Worst Opening${worstCount > 1 ? 's' : ''}`;
+        }
+        
         renderOpeningsChart('worstOpeningsChart', data.worst_openings, false);
         renderOpeningsTable('worstOpeningsTable', data.worst_openings);
     }
@@ -746,9 +760,15 @@ function renderOpeningsTable(elementId, openings) {
     let html = '';
     
     openings.forEach(opening => {
+        // PRD v2.1: Display first 6 moves if available
+        const movesHtml = opening.first_six_moves 
+            ? `<div class="opening-moves">📝 ${opening.first_six_moves}</div>`
+            : '';
+        
         html += `
             <div class="opening-row">
                 <div class="opening-name">${opening.name}</div>
+                ${movesHtml}
                 <div class="opening-games">${opening.games} games</div>
                 <div class="opening-stats">
                     <div class="opening-stat">
@@ -821,6 +841,27 @@ function renderStrengthCard(elementId, data, type) {
 // Section 8: Time of Day Performance
 async function renderTimeOfDay(data) {
     if (!data) return;
+    
+    // PRD v2.1: Display timezone in Section 8 header
+    const timezoneSelect = document.getElementById('timezone');
+    let timezone = timezoneSelect ? timezoneSelect.value : 'auto';
+    
+    if (timezone === 'auto') {
+        timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    }
+    
+    // Display timezone abbreviation
+    const timezoneDisplay = document.getElementById('timezoneDisplay');
+    if (timezoneDisplay) {
+        // Get timezone abbreviation (e.g., EST, PST, GMT+8)
+        const date = new Date();
+        const shortTz = date.toLocaleString('en-US', { 
+            timeZone: timezone, 
+            timeZoneName: 'short' 
+        }).split(' ').pop();
+        
+        timezoneDisplay.textContent = `(${shortTz})`;
+    }
     
     // Render cards only (no bar chart per Milestone 7)
     if (data.morning) renderTimeCard('morningCard', data.morning);

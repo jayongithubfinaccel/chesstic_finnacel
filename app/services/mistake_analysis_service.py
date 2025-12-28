@@ -1,6 +1,7 @@
 """
 Mistake analysis service using Stockfish engine for game evaluation.
 Milestone 8: Game Stage Mistake Analysis
+PRD v2.1: Updated critical mistake game link criteria (lost by resignation only)
 """
 import chess
 import chess.engine
@@ -245,9 +246,10 @@ class MistakeAnalysisService:
     def aggregate_mistake_analysis(self, games_data: List[Dict], username: str) -> Dict:
         """
         Aggregate mistake analysis across all games.
+        PRD v2.1: Critical mistake links now only show games player lost by resignation.
         
         Args:
-            games_data: List of game dictionaries with 'pgn' and player info
+            games_data: List of game dictionaries with 'pgn', player info, and game result
             username: Player's username to determine color
             
         Returns:
@@ -271,7 +273,8 @@ class MistakeAnalysisService:
                 'missed_opps': 0,
                 'cp_losses': [],
                 'worst_game': None,
-                'avg_cp_loss': 0
+                'avg_cp_loss': 0,
+                'critical_mistake_game': None  # PRD v2.1: Separate field for critical games
             },
             'middle': {
                 'total_moves': 0,
@@ -281,7 +284,8 @@ class MistakeAnalysisService:
                 'missed_opps': 0,
                 'cp_losses': [],
                 'worst_game': None,
-                'avg_cp_loss': 0
+                'avg_cp_loss': 0,
+                'critical_mistake_game': None
             },
             'endgame': {
                 'total_moves': 0,
@@ -291,7 +295,8 @@ class MistakeAnalysisService:
                 'missed_opps': 0,
                 'cp_losses': [],
                 'worst_game': None,
-                'avg_cp_loss': 0
+                'avg_cp_loss': 0,
+                'critical_mistake_game': None
             }
         }
         
@@ -302,7 +307,19 @@ class MistakeAnalysisService:
             for idx, game_data in enumerate(games_data):
                 # Determine player color
                 white_username = game_data.get('white', {}).get('username', '').lower()
+                black_username = game_data.get('black', {}).get('username', '').lower()
                 player_color = 'white' if white_username == username_lower else 'black'
+                
+                # Get game result information
+                player_result = None
+                termination = None
+                
+                if player_color == 'white':
+                    player_result = game_data.get('white', {}).get('result', '')
+                    termination = game_data.get('white', {}).get('termination', '')
+                else:
+                    player_result = game_data.get('black', {}).get('result', '')
+                    termination = game_data.get('black', {}).get('termination', '')
                 
                 pgn = game_data.get('pgn', '')
                 if not pgn:
@@ -310,6 +327,13 @@ class MistakeAnalysisService:
                 
                 # Analyze game
                 game_mistakes = self.analyze_game_mistakes(pgn, player_color)
+                
+                # Check if game qualifies for critical mistake link (PRD v2.1 criteria)
+                # Must meet ALL: player lost + resignation termination + significant CP drop
+                is_qualifying_game = (
+                    player_result == 'lose' and 
+                    'resign' in termination.lower() if termination else False
+                )
                 
                 # Aggregate results
                 for stage in ['early', 'middle', 'endgame']:
@@ -323,7 +347,7 @@ class MistakeAnalysisService:
                     agg_stage['missed_opps'] += stage_data['missed_opps']
                     agg_stage['cp_losses'].extend(stage_data['cp_losses'])
                     
-                    # Track worst game for this stage
+                    # Track worst game for this stage (general tracking)
                     worst_mistake = stage_data.get('worst_mistake')
                     if worst_mistake:
                         if agg_stage['worst_game'] is None or \
@@ -335,16 +359,51 @@ class MistakeAnalysisService:
                                 'move_number': worst_mistake['move_number'],
                                 'type': worst_mistake['type']
                             }
+                    
+                    # Track critical mistake game (PRD v2.1: lost by resignation only)
+                    if is_qualifying_game and worst_mistake:
+                        cp_loss = worst_mistake['cp_loss']
+                        # Check if this is bigger than current critical mistake for this stage
+                        if agg_stage['critical_mistake_game'] is None or \
+                           cp_loss > agg_stage['critical_mistake_game']['cp_loss']:
+                            # Build Chess.com URL with move position parameter
+                            base_url = game_data.get('url', '')
+                            move_num = worst_mistake['move_number']
+                            # Calculate ply number (move after which mistake occurred)
+                            ply = move_num * 2 if player_color == 'black' else (move_num * 2 - 1)
+                            game_url_with_move = f"{base_url}#{ply}" if base_url else None
+                            
+                            agg_stage['critical_mistake_game'] = {
+                                'game_index': idx,
+                                'game_url': game_url_with_move,
+                                'cp_loss': cp_loss,
+                                'move_number': move_num,
+                                'type': worst_mistake['type'],
+                                'result': player_result,
+                                'termination': termination
+                            }
                 
                 # Log progress every 10 games
                 if (idx + 1) % 10 == 0:
                     logger.info(f"Analyzed {idx + 1}/{len(games_data)} games")
             
-            # Calculate averages
+            # Calculate averages and apply significance threshold for critical mistakes
             for stage in ['early', 'middle', 'endgame']:
                 cp_losses = aggregated[stage]['cp_losses']
                 if cp_losses:
                     aggregated[stage]['avg_cp_loss'] = round(sum(cp_losses) / len(cp_losses), 1)
+                    
+                    # Calculate significance threshold (PRD v2.1: data-driven threshold)
+                    # Use 75th percentile or 300 CP, whichever is higher
+                    sorted_losses = sorted(cp_losses)
+                    percentile_75_idx = int(len(sorted_losses) * 0.75)
+                    threshold = max(sorted_losses[percentile_75_idx] if percentile_75_idx < len(sorted_losses) else 300, 300)
+                    
+                    # Filter critical mistake if below threshold
+                    critical_game = aggregated[stage]['critical_mistake_game']
+                    if critical_game and critical_game['cp_loss'] < threshold:
+                        logger.info(f"{stage} critical mistake ({critical_game['cp_loss']} CP) below threshold ({threshold} CP)")
+                        aggregated[stage]['critical_mistake_game'] = None
                 else:
                     aggregated[stage]['avg_cp_loss'] = 0
             
@@ -359,19 +418,22 @@ class MistakeAnalysisService:
         return aggregated
     
     def _empty_aggregation(self) -> Dict:
-        """Return empty aggregation structure."""
+        """Return empty aggregation structure (PRD v2.1: includes critical_mistake_game field)."""
         return {
             'early': {
                 'total_moves': 0, 'inaccuracies': 0, 'mistakes': 0, 'blunders': 0,
-                'missed_opps': 0, 'cp_losses': [], 'worst_game': None, 'avg_cp_loss': 0
+                'missed_opps': 0, 'cp_losses': [], 'worst_game': None, 'avg_cp_loss': 0,
+                'critical_mistake_game': None
             },
             'middle': {
                 'total_moves': 0, 'inaccuracies': 0, 'mistakes': 0, 'blunders': 0,
-                'missed_opps': 0, 'cp_losses': [], 'worst_game': None, 'avg_cp_loss': 0
+                'missed_opps': 0, 'cp_losses': [], 'worst_game': None, 'avg_cp_loss': 0,
+                'critical_mistake_game': None
             },
             'endgame': {
                 'total_moves': 0, 'inaccuracies': 0, 'mistakes': 0, 'blunders': 0,
-                'missed_opps': 0, 'cp_losses': [], 'worst_game': None, 'avg_cp_loss': 0
+                'missed_opps': 0, 'cp_losses': [], 'worst_game': None, 'avg_cp_loss': 0,
+                'critical_mistake_game': None
             }
         }
     

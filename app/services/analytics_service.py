@@ -544,8 +544,14 @@ class AnalyticsService:
         return result
     
     def _analyze_opening_performance(self, games: List[Dict]) -> Dict:
-        """Analyze performance by chess opening."""
-        opening_stats = defaultdict(lambda: {'wins': 0, 'losses': 0, 'draws': 0, 'games': 0})
+        """
+        Analyze performance by chess opening.
+        PRD v2.1: Includes first 6 moves in standard chess notation.
+        """
+        opening_stats = defaultdict(lambda: {
+            'wins': 0, 'losses': 0, 'draws': 0, 'games': 0, 
+            'pgns': []  # Store PGNs to extract moves later
+        })
         
         for game in games:
             opening = game['opening_name']
@@ -554,6 +560,7 @@ class AnalyticsService:
             
             result = game['result']
             opening_stats[opening]['games'] += 1
+            opening_stats[opening]['pgns'].append(game.get('pgn', ''))
             
             if result == 'win':
                 opening_stats[opening]['wins'] += 1
@@ -568,13 +575,18 @@ class AnalyticsService:
             if stats['games'] >= 3:
                 total = stats['games']
                 win_rate = (stats['wins'] / total * 100) if total > 0 else 0
+                
+                # PRD v2.1: Extract first 6 moves from most recent game
+                first_six_moves = self._extract_first_six_moves(stats['pgns'][0]) if stats['pgns'] else ''
+                
                 qualified_openings.append({
                     'name': opening,
                     'games': stats['games'],
                     'wins': stats['wins'],
                     'losses': stats['losses'],
                     'draws': stats['draws'],
-                    'win_rate': round(win_rate, 2)
+                    'win_rate': round(win_rate, 2),
+                    'first_six_moves': first_six_moves  # PRD v2.1
                 })
         
         # Sort by win rate
@@ -588,6 +600,49 @@ class AnalyticsService:
             'best_openings': best_openings,
             'worst_openings': worst_openings
         }
+    
+    def _extract_first_six_moves(self, pgn_string: str) -> str:
+        """
+        Extract first 6 moves (3 full moves) in standard chess notation.
+        PRD v2.1: Format example: "1. e4 e5 2. Nf3 Nc6 3. Bb5 a6"
+        
+        Args:
+            pgn_string: PGN string from game data
+            
+        Returns:
+            String with first 6 moves in standard notation, or empty string if error
+        """
+        if not pgn_string:
+            return ''
+        
+        try:
+            pgn = StringIO(pgn_string)
+            game = chess.pgn.read_game(pgn)
+            
+            if game is None:
+                return ''
+            
+            board = game.board()
+            moves = []
+            move_number = 1
+            
+            for i, move in enumerate(list(game.mainline_moves())[:6]):
+                san_move = board.san(move)
+                
+                # Add move number before White's move
+                if i % 2 == 0:
+                    moves.append(f"{move_number}. {san_move}")
+                else:
+                    moves.append(san_move)
+                    move_number += 1
+                
+                board.push(move)
+            
+            return ' '.join(moves)
+            
+        except Exception as e:
+            logger.warning(f"Error extracting first 6 moves: {e}")
+            return ''
     
     def _analyze_opponent_strength(self, games: List[Dict]) -> Dict:
         """Analyze performance against opponents of different strengths."""
