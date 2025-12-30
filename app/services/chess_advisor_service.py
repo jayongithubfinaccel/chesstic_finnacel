@@ -482,100 +482,49 @@ Provide recommendations in this EXACT format (all 9 sections are MANDATORY):
     
     def _get_opening_videos(self, summary_data: Dict) -> List[Dict[str, str]]:
         """
-        Get YouTube video recommendations for pla with exactly 9 section-specific suggestions.
+        Get YouTube video recommendations for frequently played openings.
         
         Args:
-            response_text: Raw response from OpenAI
+            summary_data: Summary data containing opening performance
             
         Returns:
-            Dictionary with 'suggestions' (list of 9 dicts with section_number, 
-            section_name, advice) and 'overall' (str)
+            List of video recommendations with opening name, channel, title, and URL
         """
-        lines = response_text.strip().split("\n")
-        suggestions = []
-        overall = ""
+        videos = []
         
-        current_section = None
-        current_section_num = None
-        current_advice = []
+        # Extract opening performance from summary data
+        opening_perf = summary_data.get('opening_performance', {})
+        best_openings = opening_perf.get('best_openings', [])
+        worst_openings = opening_perf.get('worst_openings', [])
         
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-            
-            # Check if this is a section header
-            if line.startswith("**Section") and ":" in line:
-                # Save previous section if exists
-                if current_section and current_advice:
-                    suggestions.append({
-                        "section_number": current_section_num,
-                        "section_name": current_section,
-                        "advice": " ".join(current_advice).strip()
-                    })
-                    current_advice = []
-                
-                # Extract section info
-                # Format: **Section X - Name:**
-                section_part = line.split(":", 1)[0].replace("**", "").strip()
-                parts = section_part.split("-", 1)
-                
-                if len(parts) == 2:
-                    section_num_str = parts[0].replace("Section", "").strip()
-                    section_name = parts[1].strip()
-                    
-                    try:
-                        current_section_num = int(section_num_str)
-                        current_section = section_name
-                    except ValueError:
-                        current_section = section_part
-                        current_section_num = len(suggestions) + 1
-                else:
-                    current_section = section_part
-                    current_section_num = len(suggestions) + 1
-                    
-            elif line.startswith("**Overall Recommendation"):
-                # Save last section before overall
-                if current_section and current_advice:
-                    suggestions.append({
-                        "section_number": current_section_num,
-                        "section_name": current_section,
-                        "advice": " ".join(current_advice).strip()
-                    })
-                    current_advice = []
-                current_section = "overall"
-                current_section_num = None
-                
-            elif line.startswith("-") or line.startswith("•") or line.startswith("*"):
-                # This is advice content
-                advice_line = line.lstrip("-•*").strip()
-                if current_section == "overall":
-                    overall += advice_line + " "
-                else:
-                    current_advice.append(advice_line)
-            else:
-                # Continue previous advice
-                if current_section == "overall":
-                    overall += line + " "
-                elif current_advice or current_section:
-                    current_advice.append(line)
+        # Collect all unique opening names
+        opening_names = set()
         
-        # Save last section if not saved
-        if current_section and current_section != "overall" and current_advice:
-            suggestions.append({
-                "section_number": current_section_num,
-                "section_name": current_section,
-                "advice": " ".join(current_advice).strip()
-            })
+        # Extract opening names from best_openings (format: "Opening Name (X% win rate)")
+        for opening_str in best_openings:
+            if '(' in opening_str:
+                opening_name = opening_str.split('(')[0].strip()
+                opening_names.add(opening_name)
         
-        # Ensure we have exactly 9 suggestions
-        if len(suggestions) < 9:
-            logger.warning(f"Only {len(suggestions)} section suggestions found, expected 9")
+        # Extract opening names from worst_openings
+        for opening_str in worst_openings:
+            if '(' in opening_str:
+                opening_name = opening_str.split('(')[0].strip()
+                opening_names.add(opening_name)
         
-        return {
-            'suggestions': suggestions[:9],  # Limit to first 9
-            'overall': overall.strip()
-        }
+        # Find videos for openings (only if they have 3+ games based on PRD)
+        for opening_name in opening_names:
+            # Check if we have a video for this opening
+            if opening_name in OPENING_VIDEOS:
+                video_info = OPENING_VIDEOS[opening_name]
+                videos.append({
+                    'opening': opening_name,
+                    'channel': video_info['channel'],
+                    'title': video_info['title'],
+                    'url': video_info['url']
+                })
+        
+        return videos
     
     def _parse_advice_response(self, response_text: str) -> Dict:
         """

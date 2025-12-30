@@ -1117,7 +1117,17 @@ function renderAISuggestions(suggestions) {
     
     suggestions.forEach(suggestion => {
         const li = document.createElement('li');
-        li.textContent = suggestion;
+        
+        // Handle both structured format (new) and plain string format (fallback)
+        if (typeof suggestion === 'object' && suggestion.advice) {
+            // Structured format: {section_number, section_name, advice}
+            const sectionLabel = `<strong>Section ${suggestion.section_number} (${suggestion.section_name}):</strong> `;
+            li.innerHTML = sectionLabel + suggestion.advice;
+        } else {
+            // Plain string format (legacy)
+            li.textContent = suggestion;
+        }
+        
         list.appendChild(li);
     });
 }

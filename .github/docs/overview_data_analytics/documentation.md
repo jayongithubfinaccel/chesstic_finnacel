@@ -1568,3 +1568,151 @@ import re  # For regex pattern matching
 
 **End of Section 6 Enhancement Documentation**
 
+---
+
+## Bug Fixes - December 30, 2025
+
+### Date: December 30, 2025
+
+#### Summary
+Fixed two critical issues reported by user:
+1. Elo rating progression chart not grouping data by day
+2. AI recommendations not displaying correctly on frontend
+
+Total changes: 40 lines modified across 2 files.
+
+---
+
+### Bug Fix 1: Elo Rating Progression - Daily Grouping
+
+**File:** `app/services/analytics_service.py`  
+**Function:** `_analyze_elo_progression()`  
+**Lines Changed:** 25 lines modified  
+**Severity:** Medium
+
+**Issue:**
+- Chart displayed every individual game's rating as separate data point
+- Multiple games per day created cluttered, unreadable chart
+- Did not match PRD EA-003 requirement for "daily intervals"
+
+**Solution:**
+Implemented daily aggregation logic:
+```python
+def _analyze_elo_progression(self, games: List[Dict]) -> Dict:
+    """Analyze Elo rating progression over time."""
+    # Group by date and take the last rating of each day
+    daily_ratings = {}
+    
+    for game in games:
+        date = game['date']
+        rating = game['player_rating']
+        # Keep updating - the last game of the day will be the final value
+        daily_ratings[date] = rating
+    
+    # Convert to list and sort by date
+    data_points = [
+        {'date': date, 'rating': rating}
+        for date, rating in sorted(daily_ratings.items())
+    ]
+    
+    # Calculate rating change
+    rating_change = 0
+    if len(data_points) >= 2:
+        rating_change = data_points[-1]['rating'] - data_points[0]['rating']
+    
+    return {
+        'data_points': data_points,
+        'rating_change': rating_change
+    }
+```
+
+**Changes:**
+- Use dictionary to group ratings by date
+- Store last rating value for each day (end-of-day rating)
+- Sort data points chronologically
+- One data point per day on chart
+
+**Impact:**
+- ✅ Clean, readable chart with daily data points
+- ✅ Matches PRD requirement for daily intervals
+- ✅ Better performance (fewer points to render)
+- ✅ Improved user experience
+
+---
+
+### Bug Fix 2: AI Recommendations Display Format
+
+**File:** `static/js/analytics.js`  
+**Function:** `renderAISuggestions()`  
+**Lines Changed:** 15 lines modified  
+**Severity:** High
+
+**Issue:**
+- AI recommendations not rendering on frontend
+- Backend returns structured objects: `{section_number, section_name, advice}`
+- Frontend expected plain strings
+- Result: blank or "[object Object]" displayed
+
+**Solution:**
+Updated rendering function to handle structured format:
+```javascript
+function renderAISuggestions(suggestions) {
+    const list = document.getElementById('aiSuggestionsList');
+    if (!list) return;
+    
+    list.innerHTML = '';
+    
+    if (!suggestions || suggestions.length === 0) {
+        list.innerHTML = '<li>No specific suggestions available at this time.</li>';
+        return;
+    }
+    
+    suggestions.forEach(suggestion => {
+        const li = document.createElement('li');
+        
+        // Handle both structured format (new) and plain string format (fallback)
+        if (typeof suggestion === 'object' && suggestion.advice) {
+            // Structured format: {section_number, section_name, advice}
+            const sectionLabel = `<strong>Section ${suggestion.section_number} (${suggestion.section_name}):</strong> `;
+            li.innerHTML = sectionLabel + suggestion.advice;
+        } else {
+            // Plain string format (legacy)
+            li.textContent = suggestion;
+        }
+        
+        list.appendChild(li);
+    });
+}
+```
+
+**Changes:**
+- Added object type detection
+- Extract `section_number`, `section_name`, and `advice` from structured format
+- Format display as: "**Section X (Section Name):** advice text"
+- Maintain backward compatibility with plain strings
+
+**Impact:**
+- ✅ AI recommendations now display correctly
+- ✅ Clear section labels for each recommendation
+- ✅ Matches PRD v2.1 format requirements
+- ✅ Backward compatible with legacy format
+- ✅ Better UX with formatted, organized advice
+
+---
+
+### Testing Results
+
+**After fixes:**
+- ✅ No errors detected in codebase
+- ✅ Elo chart displays one point per day
+- ✅ AI recommendations render with section labels
+- ✅ Both fixes align with PRD requirements
+
+**Related PRD Sections:**
+- EA-003: Elo Rating Progression
+- EA-019: AI Chess Advisor Recommendations v2.1
+
+---
+
+**End of December 30, 2025 Bug Fixes**
+

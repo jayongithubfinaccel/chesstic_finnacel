@@ -483,13 +483,20 @@ class AnalyticsService:
     
     def _analyze_elo_progression(self, games: List[Dict]) -> Dict:
         """Analyze Elo rating progression over time."""
-        data_points = []
+        # Group by date and take the last rating of each day
+        daily_ratings = {}
         
         for game in games:
-            data_points.append({
-                'date': game['date'],
-                'rating': game['player_rating']
-            })
+            date = game['date']
+            rating = game['player_rating']
+            # Keep updating - the last game of the day will be the final value
+            daily_ratings[date] = rating
+        
+        # Convert to list and sort by date
+        data_points = [
+            {'date': date, 'rating': rating}
+            for date, rating in sorted(daily_ratings.items())
+        ]
         
         # Calculate rating change
         rating_change = 0
