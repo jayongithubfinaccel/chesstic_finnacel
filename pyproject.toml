@@ -1,0 +1,21 @@
+[project]
+name = "chesstic-v2"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "flask>=3.1.2",
+    "python-chess>=1.999",
+    "python-dotenv>=1.2.1",
+    "pytz>=2025.2",
+    "requests>=2.32.5",
+    "openai>=1.58.1",
+    "stockfish>=3.28.0",
+    "flask-cors>=6.0.2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.1",
+]

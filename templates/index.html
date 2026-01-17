@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chess Analytics - Analyze Your Chess.com Games</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-brand">
+                <h1>♟️ Chess Analytics</h1>
+            </div>
+            <div class="nav-links">
+                <a href="/" class="active">Home</a>
+                <a href="/analytics">Analytics</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container">
+        <section class="hero">
+            <h2>Analyze Your Chess.com Games</h2>
+            <p>Get detailed insights into your chess performance over any time period</p>
+        </section>
+
+        <section class="input-section">
+            <form id="analyzeForm" class="analyze-form">
+                <div class="form-group">
+                    <label for="username">Chess.com Username</label>
+                    <input 
+                        type="text" 
+                        id="username" 
+                        name="username" 
+                        placeholder="Enter your username"
+                        required
+                        pattern="[a-zA-Z0-9_-]{3,25}"
+                        title="Username must be 3-25 characters (letters, numbers, underscore, hyphen)"
+                    >
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="startDate">Start Date</label>
+                        <input 
+                            type="date" 
+                            id="startDate" 
+                            name="startDate" 
+                            required
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="endDate">End Date</label>
+                        <input 
+                            type="date" 
+                            id="endDate" 
+                            name="endDate" 
+                            required
+                        >
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-primary">Analyze Games</button>
+            </form>
+
+            <div id="loading" class="loading hidden">
+                <div class="spinner"></div>
+                <p>Fetching and analyzing your games...</p>
+            </div>
+
+            <div id="error" class="error hidden"></div>
+        </section>
+
+        <section id="results" class="results hidden">
+            <h3>Analysis Results</h3>
+            
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h4>Total Games</h4>
+                    <p class="stat-value" id="totalGames">0</p>
+                </div>
+                
+                <div class="stat-card">
+                    <h4>Wins</h4>
+                    <p class="stat-value win" id="wins">0</p>
+                </div>
+                
+                <div class="stat-card">
+                    <h4>Losses</h4>
+                    <p class="stat-value loss" id="losses">0</p>
+                </div>
+                
+                <div class="stat-card">
+                    <h4>Draws</h4>
+                    <p class="stat-value draw" id="draws">0</p>
+                </div>
+                
+                <div class="stat-card">
+                    <h4>Win Rate</h4>
+                    <p class="stat-value" id="winRate">0%</p>
+                </div>
+            </div>
+
+            <div class="detailed-stats">
+                <div class="stat-section">
+                    <h4>Performance by Color</h4>
+                    <div id="colorStats" class="color-stats"></div>
+                </div>
+
+                <div class="stat-section">
+                    <h4>Performance by Time Control</h4>
+                    <div id="timeControlStats" class="time-control-stats"></div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2024 Chess Analytics. Data from Chess.com API.</p>
+        </div>
+    </footer>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
