@@ -29,24 +29,27 @@ def convert_utc_to_timezone(utc_timestamp: int, timezone_str: str) -> datetime:
 
 def get_time_of_day_category(dt: datetime) -> str:
     """
-    Categorize time into morning, afternoon, or night.
+    Categorize time into morning, afternoon, evening, or night.
     
-    Morning: 6:00 AM - 2:00 PM
-    Afternoon: 2:00 PM - 10:00 PM
+    Morning: 6:00 AM - 12:00 PM
+    Afternoon: 12:00 PM - 6:00 PM
+    Evening: 6:00 PM - 10:00 PM
     Night: 10:00 PM - 6:00 AM
     
     Args:
         dt: Datetime object in user's timezone
         
     Returns:
-        Category: 'morning', 'afternoon', or 'night'
+        Category: 'morning', 'afternoon', 'evening', or 'night'
     """
     hour = dt.hour
     
-    if 6 <= hour < 14:
+    if 6 <= hour < 12:
         return 'morning'
-    elif 14 <= hour < 22:
+    elif 12 <= hour < 18:
         return 'afternoon'
+    elif 18 <= hour < 22:
+        return 'evening'
     else:
         return 'night'
 

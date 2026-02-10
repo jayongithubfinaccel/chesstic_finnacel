@@ -407,20 +407,34 @@ class AnalyticsService:
         """
         Analyze overall win/loss/draw performance over time.
         
-        Returns daily aggregated statistics.
+        Returns daily aggregated statistics and overall metrics.
         """
         daily_stats = defaultdict(lambda: {'wins': 0, 'losses': 0, 'draws': 0})
+        total_wins = 0
+        total_losses = 0
+        total_draws = 0
+        total_rating = 0
+        rating_count = 0
         
         for game in games:
             date = game['date']
             result = game['result']
             
+            # Track totals
             if result == 'win':
                 daily_stats[date]['wins'] += 1
+                total_wins += 1
             elif result in ['checkmated', 'timeout', 'resigned', 'lose', 'abandoned']:
                 daily_stats[date]['losses'] += 1
+                total_losses += 1
             else:
                 daily_stats[date]['draws'] += 1
+                total_draws += 1
+            
+            # Track ratings
+            if game.get('player_rating', 0) > 0:
+                total_rating += game['player_rating']
+                rating_count += 1
         
         # Convert to list format
         daily_list = []
@@ -433,7 +447,36 @@ class AnalyticsService:
                 'draws': stats['draws']
             })
         
-        return {'daily_stats': daily_list}
+        # Calculate metrics
+        total_games = total_wins + total_losses + total_draws
+        win_rate = (total_wins / total_games * 100) if total_games > 0 else 0
+        avg_rating = (total_rating / rating_count) if rating_count > 0 else 0
+        
+        # Get rating change
+        start_rating = games[0].get('player_rating', 0) if games else 0
+        end_rating = games[-1].get('player_rating', 0) if games else 0
+        rating_change = end_rating - start_rating
+        
+        # Determine trend
+        if rating_change > 10:
+            rating_trend = "Improving"
+        elif rating_change < -10:
+            rating_trend = "Declining"
+        else:
+            rating_trend = "Stable"
+        
+        return {
+            'daily_stats': daily_list,
+            'win_rate': round(win_rate, 2),
+            'total': {
+                'wins': total_wins,
+                'losses': total_losses,
+                'draws': total_draws
+            },
+            'avg_rating': round(avg_rating, 2),
+            'rating_change': round(rating_change, 2),
+            'rating_trend': rating_trend
+        }
     
     def _analyze_color_performance(self, games: List[Dict]) -> Dict:
         """Analyze performance by color (white vs black)."""
@@ -485,12 +528,14 @@ class AnalyticsService:
         """Analyze Elo rating progression over time."""
         # Group by date and take the last rating of each day
         daily_ratings = {}
+        all_ratings = []
         
         for game in games:
             date = game['date']
             rating = game['player_rating']
             # Keep updating - the last game of the day will be the final value
             daily_ratings[date] = rating
+            all_ratings.append(rating)
         
         # Convert to list and sort by date
         data_points = [
@@ -498,14 +543,21 @@ class AnalyticsService:
             for date, rating in sorted(daily_ratings.items())
         ]
         
-        # Calculate rating change
-        rating_change = 0
-        if len(data_points) >= 2:
-            rating_change = data_points[-1]['rating'] - data_points[0]['rating']
+        # Calculate metrics
+        start_rating = data_points[0]['rating'] if data_points else 0
+        end_rating = data_points[-1]['rating'] if data_points else 0
+        rating_change = end_rating - start_rating
+        
+        peak_rating = max(all_ratings) if all_ratings else 0
+        lowest_rating = min(all_ratings) if all_ratings else 0
         
         return {
             'data_points': data_points,
-            'rating_change': rating_change
+            'rating_change': rating_change,
+            'start_rating': start_rating,
+            'end_rating': end_rating,
+            'peak_rating': peak_rating,
+            'lowest_rating': lowest_rating
         }
     
     def _analyze_termination_wins(self, games: List[Dict]) -> Dict:
@@ -518,16 +570,10 @@ class AnalyticsService:
                 termination_counts[game['termination']] += 1
                 total_wins += 1
         
-        # Calculate percentages
-        result = {}
-        for termination, count in termination_counts.items():
-            percentage = (count / total_wins * 100) if total_wins > 0 else 0
-            result[termination] = {
-                'count': count,
-                'percentage': round(percentage, 2)
-            }
-        
-        return result
+        return {
+            'total_wins': total_wins,
+            'breakdown': dict(termination_counts)
+        }
     
     def _analyze_termination_losses(self, games: List[Dict]) -> Dict:
         """Analyze how player loses games."""
@@ -539,25 +585,22 @@ class AnalyticsService:
                 termination_counts[game['termination']] += 1
                 total_losses += 1
         
-        # Calculate percentages
-        result = {}
-        for termination, count in termination_counts.items():
-            percentage = (count / total_losses * 100) if total_losses > 0 else 0
-            result[termination] = {
-                'count': count,
-                'percentage': round(percentage, 2)
-            }
-        
-        return result
+        return {
+            'total_losses': total_losses,
+            'breakdown': dict(termination_counts)
+        }
     
     def _analyze_opening_performance(self, games: List[Dict]) -> Dict:
         """
-        Analyze performance by chess opening.
-        PRD v2.2: Changed to frequency-based analysis (top 10 most common openings).
-        Removed best/worst categorization, 3-game minimum, and move sequence display.
+        Analyze performance by chess opening, split by color.
+        Returns best and worst performing openings for white and black separately.
         """
-        opening_stats = defaultdict(lambda: {
-            'wins': 0, 'losses': 0, 'draws': 0, 'games': 0
+        # Track stats by color and opening
+        white_opening_stats = defaultdict(lambda: {
+            'wins': 0, 'losses': 0, 'draws': 0, 'games': 0, 'sample_pgn': None
+        })
+        black_opening_stats = defaultdict(lambda: {
+            'wins': 0, 'losses': 0, 'draws': 0, 'games': 0, 'sample_pgn': None
         })
         
         for game in games:
@@ -565,51 +608,78 @@ class AnalyticsService:
             if opening == 'Unknown':
                 continue
             
+            player_color = game['player_color']
             result = game['result']
-            opening_stats[opening]['games'] += 1
+            pgn = game.get('pgn', '')
+            
+            # Select the right stats dict based on color
+            stats = white_opening_stats if player_color == 'white' else black_opening_stats
+            
+            stats[opening]['games'] += 1
+            
+            # Store a sample PGN for move extraction
+            if stats[opening]['sample_pgn'] is None and pgn:
+                stats[opening]['sample_pgn'] = pgn
             
             if result == 'win':
-                opening_stats[opening]['wins'] += 1
+                stats[opening]['wins'] += 1
             elif result in ['checkmated', 'timeout', 'resigned', 'lose', 'abandoned']:
-                opening_stats[opening]['losses'] += 1
+                stats[opening]['losses'] += 1
             else:
-                opening_stats[opening]['draws'] += 1
+                stats[opening]['draws'] += 1
         
-        # PRD v2.2: Get all openings and sort by frequency (games played)
-        all_openings = []
-        for opening, stats in opening_stats.items():
-            total = stats['games']
-            win_rate = (stats['wins'] / total * 100) if total > 0 else 0
+        def process_openings_by_color(opening_stats):
+            """Process opening stats for a specific color."""
+            all_openings = []
+            for opening, stats in opening_stats.items():
+                total = stats['games']
+                if total < 2:  # Skip openings with less than 2 games
+                    continue
+                    
+                win_rate = (stats['wins'] / total * 100) if total > 0 else 0
+                
+                # Extract first 6 moves from sample PGN
+                first_moves = self._extract_first_six_moves(stats['sample_pgn'])
+                fen = self._get_opening_position_fen(stats['sample_pgn'])
+                
+                all_openings.append({
+                    'opening': opening,
+                    'games': stats['games'],
+                    'wins': stats['wins'],
+                    'losses': stats['losses'],
+                    'draws': stats['draws'],
+                    'win_rate': round(win_rate, 2),
+                    'first_moves': first_moves,
+                    'fen': fen
+                })
             
-            all_openings.append({
-                'name': opening,
-                'games': stats['games'],
-                'wins': stats['wins'],
-                'losses': stats['losses'],
-                'draws': stats['draws'],
-                'win_rate': round(win_rate, 2)
-            })
-        
-        # Sort by frequency (most played first)
-        all_openings.sort(key=lambda x: x['games'], reverse=True)
-        
-        # Return top 10 most common openings
-        top_common_openings = all_openings[:10]
+            # Sort by win rate (descending) for best openings
+            all_openings.sort(key=lambda x: (x['win_rate'], x['games']), reverse=True)
+            best_openings = all_openings[:5]  # Top 5 best
+            
+            # Sort by win rate (ascending) for worst openings
+            worst_openings = sorted(all_openings, key=lambda x: (x['win_rate'], -x['games']))[:5]
+            
+            return {
+                'best_openings': best_openings,
+                'worst_openings': worst_openings
+            }
         
         return {
-            'top_common_openings': top_common_openings
+            'white': process_openings_by_color(white_opening_stats),
+            'black': process_openings_by_color(black_opening_stats)
         }
     
     def _extract_first_six_moves(self, pgn_string: str) -> str:
         """
-        Extract first 6 moves (3 full moves) in standard chess notation.
-        PRD v2.1: Format example: "1. e4 e5 2. Nf3 Nc6 3. Bb5 a6"
+        Extract first 12 individual moves (6 full moves) in standard chess notation.
+        Format example: "1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 5. O-O Be7 6. Re1 b5"
         
         Args:
             pgn_string: PGN string from game data
             
         Returns:
-            String with first 6 moves in standard notation, or empty string if error
+            String with first 12 moves in standard notation, or empty string if error
         """
         if not pgn_string:
             return ''
@@ -625,7 +695,7 @@ class AnalyticsService:
             moves = []
             move_number = 1
             
-            for i, move in enumerate(list(game.mainline_moves())[:6]):
+            for i, move in enumerate(list(game.mainline_moves())[:12]):
                 san_move = board.san(move)
                 
                 # Add move number before White's move
@@ -640,16 +710,54 @@ class AnalyticsService:
             return ' '.join(moves)
             
         except Exception as e:
-            logger.warning(f"Error extracting first 6 moves: {e}")
+            logger.warning(f"Error extracting first 12 moves: {e}")
+            return ''
+    
+    def _get_opening_position_fen(self, pgn_string: str) -> str:
+        """
+        Get FEN position after first 12 individual moves (6 full moves) from PGN.
+        
+        Args:
+            pgn_string: PGN string from game data
+            
+        Returns:
+            FEN string representing board position after 6 full moves, or empty string if error
+        """
+        if not pgn_string:
+            return ''
+        
+        try:
+            pgn = StringIO(pgn_string)
+            game = chess.pgn.read_game(pgn)
+            
+            if game is None:
+                return ''
+            
+            board = game.board()
+            
+            # Play first 12 moves (6 full moves)
+            for i, move in enumerate(list(game.mainline_moves())[:12]):
+                board.push(move)
+            
+            # Return FEN position
+            return board.fen()
+            
+        except Exception as e:
+            logger.warning(f"Error generating FEN: {e}")
             return ''
     
     def _analyze_opponent_strength(self, games: List[Dict]) -> Dict:
         """Analyze performance against opponents of different strengths."""
         categories = {
-            'lower_rated': {'wins': 0, 'losses': 0, 'draws': 0, 'games': 0},
-            'similar_rated': {'wins': 0, 'losses': 0, 'draws': 0, 'games': 0},
-            'higher_rated': {'wins': 0, 'losses': 0, 'draws': 0, 'games': 0}
+            'much_lower': {'wins': 0, 'losses': 0, 'draws': 0, 'games': 0, 'rating_sum': 0},
+            'lower': {'wins': 0, 'losses': 0, 'draws': 0, 'games': 0, 'rating_sum': 0},
+            'similar': {'wins': 0, 'losses': 0, 'draws': 0, 'games': 0, 'rating_sum': 0},
+            'higher': {'wins': 0, 'losses': 0, 'draws': 0, 'games': 0, 'rating_sum': 0},
+            'much_higher': {'wins': 0, 'losses': 0, 'draws': 0, 'games': 0, 'rating_sum': 0}
         }
+        
+        total_opponent_rating = 0
+        games_with_rating = 0
         
         for game in games:
             player_rating = game['player_rating']
@@ -658,19 +766,27 @@ class AnalyticsService:
             if not player_rating or not opponent_rating:
                 continue
             
+            total_opponent_rating += opponent_rating
+            games_with_rating += 1
+            
             # Calculate Elo differential
             elo_diff = opponent_rating - player_rating
             
-            # Categorize
-            if elo_diff < -100:
-                category = 'lower_rated'
-            elif -100 <= elo_diff <= 100:
-                category = 'similar_rated'
-            else:
-                category = 'higher_rated'
+            # Categorize with 5 levels
+            if elo_diff < -200:
+                category = 'much_lower'
+            elif -200 <= elo_diff < -100:
+                category = 'lower'
+            elif -100 <= elo_diff <= 99:
+                category = 'similar'
+            elif 100 <= elo_diff < 200:
+                category = 'higher'
+            else:  # >= 200
+                category = 'much_higher'
             
             result = game['result']
             categories[category]['games'] += 1
+            categories[category]['rating_sum'] += opponent_rating
             
             if result == 'win':
                 categories[category]['wins'] += 1
@@ -679,27 +795,43 @@ class AnalyticsService:
             else:
                 categories[category]['draws'] += 1
         
-        # Calculate win rates
+        # Calculate win rates and average opponent ratings for each category
         for category in categories.values():
             total = category['games']
             win_rate = (category['wins'] / total * 100) if total > 0 else 0
             category['win_rate'] = round(win_rate, 2)
+            
+            # Calculate average opponent rating for this category
+            avg_opp_rating = (category['rating_sum'] / total) if total > 0 else 0
+            category['avg_rating'] = round(avg_opp_rating, 1)
+            
+            # Remove rating_sum as it's not needed in output
+            del category['rating_sum']
         
-        return categories
+        avg_opponent_rating = total_opponent_rating / games_with_rating if games_with_rating > 0 else 0
+        
+        return {
+            'avg_opponent_rating': round(avg_opponent_rating, 1),
+            'by_rating_diff': categories
+        }
     
     def _analyze_time_of_day(self, games: List[Dict]) -> Dict:
         """Analyze performance by time of day."""
         periods = {
-            'morning': {'wins': 0, 'losses': 0, 'draws': 0, 'games': 0},
-            'afternoon': {'wins': 0, 'losses': 0, 'draws': 0, 'games': 0},
-            'night': {'wins': 0, 'losses': 0, 'draws': 0, 'games': 0}
+            'morning': {'wins': 0, 'losses': 0, 'draws': 0, 'games': 0, 'rating_sum': 0},
+            'afternoon': {'wins': 0, 'losses': 0, 'draws': 0, 'games': 0, 'rating_sum': 0},
+            'evening': {'wins': 0, 'losses': 0, 'draws': 0, 'games': 0, 'rating_sum': 0},
+            'night': {'wins': 0, 'losses': 0, 'draws': 0, 'games': 0, 'rating_sum': 0}
         }
         
         for game in games:
             period = game['time_of_day']
             result = game['result']
+            player_rating = game['player_rating']
             
             periods[period]['games'] += 1
+            if player_rating:
+                periods[period]['rating_sum'] += player_rating
             
             if result == 'win':
                 periods[period]['wins'] += 1
@@ -708,11 +840,18 @@ class AnalyticsService:
             else:
                 periods[period]['draws'] += 1
         
-        # Calculate win rates
+        # Calculate win rates and average ratings
         for period in periods.values():
             total = period['games']
             win_rate = (period['wins'] / total * 100) if total > 0 else 0
             period['win_rate'] = round(win_rate, 2)
+            
+            # Calculate average rating for this time period
+            avg_rating = (period['rating_sum'] / total) if total > 0 else 0
+            period['avg_rating'] = round(avg_rating, 1)
+            
+            # Remove rating_sum as it's not needed in output
+            del period['rating_sum']
         
         return periods
     

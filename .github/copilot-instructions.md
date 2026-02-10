@@ -52,6 +52,7 @@ Flask-based chess analytics website that pulls data from Chess.com API. Users en
 - Use type hints where appropriate
 - Write docstrings for all functions and classes
 - Use meaningful variable and function names
+- For the environment, and development locally use `uv` for package management
 
 ### Flask Best Practices
 - Use blueprints for route organization

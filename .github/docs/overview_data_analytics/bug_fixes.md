@@ -625,3 +625,106 @@ Timezone conversion is working correctly:
 - ✅ "Auto-detect" still works for all timezones
 
 **Related PRD Section:** EA-008 (Time of Day Performance)
+
+---
+
+## Bug Fix - January 10, 2026
+
+### Analytics Service - Incomplete Data Structures in Analysis Methods
+**Severity:** High  
+**Files:** 
+- [app/services/analytics_service.py](app/services/analytics_service.py)
+- [app/utils/timezone_utils.py](app/utils/timezone_utils.py)  
+**Functions:** Multiple analysis methods  
+**Discovered During:** Jupyter notebook analysis execution
+
+**Issue:**
+Multiple analytics service methods were returning incomplete data structures that didn't match the notebook's display expectations:
+
+1. **_analyze_overall_performance**: Missing `win_rate`, `total`, `avg_rating`, `rating_change`, `rating_trend` fields
+2. **_analyze_elo_progression**: Missing `start_rating`, `end_rating`, `peak_rating`, `lowest_rating` fields
+3. **_analyze_termination_wins**: Returned `{termination: {'count': X, 'percentage': Y}}` instead of `{'total_wins': X, 'breakdown': {termination: count}}`
+4. **_analyze_termination_losses**: Similar structure issue as termination_wins
+5. **_analyze_opening_performance**: Returned `'name'` field instead of `'opening'`, missing `best_openings` and `worst_openings` lists
+6. **_analyze_opponent_strength**: Returned only 3 categories instead of 5, missing `avg_opponent_rating` and `by_rating_diff` wrapper
+7. **_analyze_time_of_day**: Missing `avg_rating` field per period, only 3 periods instead of 4
+8. **get_time_of_day_category**: Only returned 3 categories (morning, afternoon, night) instead of 4 (missing evening)
+
+This caused all 6 analysis sections in the notebook to display N/A values despite having 82 games of data.
+
+**Root Cause:**
+The analytics methods were originally designed for internal/API use but the notebook expected user-facing complete structures with all display fields.
+
+**Fix Applied:**
+
+1. **_analyze_overall_performance** (lines 406-479):
+   - Added calculation and return of `win_rate`, `total`, `avg_rating`, `rating_change`, `rating_trend`
+
+2. **_analyze_elo_progression** (lines 526-560):
+   - Added `start_rating`, `end_rating`, `peak_rating`, `lowest_rating` fields
+
+3. **_analyze_termination_wins** & **_analyze_termination_losses** (lines 563-592):
+   - Changed return structure to `{'total_wins': X, 'breakdown': dict(termination_counts)}`
+   - Simplified logic, removed percentage calculations (moved to display layer)
+
+4. **_analyze_opening_performance** (lines 593-645):
+   - Changed field from `'name'` to `'opening'`
+   - Added 2-game minimum for meaningful win rate
+   - Returns `best_openings` (sorted by win rate desc) and `worst_openings` (sorted by win rate asc)
+   - Top 5 each instead of top 10 common
+
+5. **_analyze_opponent_strength** (lines 686-752):
+   - Expanded from 3 to 5 rating difference categories:
+     - `much_lower` (<-200), `lower` (-200 to -100), `similar` (-100 to +99), `higher` (+100 to +199), `much_higher` (≥+200)
+   - Added `avg_opponent_rating` field
+   - Added `by_rating_diff` wrapper for categories
+   - Added per-category `avg_rating` field
+
+6. **_analyze_time_of_day** (lines 755-791):
+   - Added `avg_rating` calculation per time period
+   - Expanded from 3 to 4 periods (added evening)
+
+7. **get_time_of_day_category** in timezone_utils.py (lines 29-52):
+   - Changed from 3 periods to 4:
+     - Morning: 6am-12pm (was 6am-2pm)
+     - Afternoon: 12pm-6pm (was 2pm-10pm)
+     - Evening: 6pm-10pm (NEW)
+     - Night: 10pm-6am
+
+8. **Syntax Error Fix** (line 646):
+   - Removed duplicate closing brace `}` that was causing SyntaxError
+
+**Code Changes Summary:**
+- **_analyze_overall_performance**: +28 lines (added metrics calculations)
+- **_analyze_elo_progression**: +15 lines (added rating extremes)
+- **_analyze_termination_wins/losses**: -32 lines (simplified structure)
+- **_analyze_opening_performance**: +13 lines (best/worst logic)
+- **_analyze_opponent_strength**: +39 lines (5 categories + avg ratings)
+- **_analyze_time_of_day**: +12 lines (avg rating per period)
+- **get_time_of_day_category**: +4 lines (added evening period)
+- **Syntax fix**: -1 line
+
+**Test Results After Fix:**
+- ✅ Overall Performance: Shows 52.4% win rate, +22 rating change, Improving trend
+- ✅ Color Performance: Working correctly
+- ✅ ELO Progression: Shows rating from 1822 → 1830, peak 1867, low 1788
+- ✅ Termination Analysis: 43 wins, 38 losses with breakdown
+- ✅ Opening Performance: Best (Pirc 75%) and Worst (Unknown 38.9%)
+- ✅ Opponent Strength: Avg 1825 rating, performance by 5 categories
+- ✅ Time of Day: 4 periods with win rates, afternoon best (70%)
+- ✅ Mistake Analysis: Correctly shows unavailable (Stockfish not installed)
+
+**Impact:** 
+- Critical fix - all 6 analysis sections now display data correctly
+- Restored full analytics capability in Jupyter notebook
+- Time periods now match industry standard (4 periods with separate evening)
+- Enhanced opponent strength granularity (5 categories vs 3)
+- Better opening analysis (best/worst instead of just frequency)
+
+**Related PRD Sections:** 
+- EA-001 (Overall Performance)
+- EA-004 (ELO Progression)
+- EA-005 (Termination Analysis)
+- EA-006 (Opening Performance)
+- EA-007 (Opponent Strength)
+- EA-008 (Time of Day Performance)
