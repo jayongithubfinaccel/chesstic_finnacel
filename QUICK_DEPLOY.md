@@ -92,27 +92,84 @@ You should see your Chesstic application running!
 
 ---
 
-## Future Deployments
+## 🚀 Future Deployments - ONE COMMAND!
 
-For subsequent deployments, you only need to:
+### ⭐ Recommended: One-Command Deployment (NEW!)
 
-### Option 1: Run deploy.sh (Full Redeployment)
+**From your local Windows machine, just run:**
+
+```bash
+bash quick_deploy.sh "Your commit message"
+```
+
+**That's it!** This single command automatically:
+- ✅ Commits and pushes your local changes to GitHub
+- ✅ Connects to your server (159.65.140.136)
+- ✅ Creates automatic backup before updating
+- ✅ Pulls latest code from GitHub
+- ✅ Updates dependencies safely
+- ✅ Verifies all critical packages are installed
+- ✅ Restarts the service
+- ✅ Tests that website is responding
+- ✅ **Automatic rollback if anything fails!**
+
+**Examples:**
+```bash
+# Deploy with a specific message
+bash quick_deploy.sh "Fixed analytics bug"
+
+# Deploy with another message  
+bash quick_deploy.sh "Added new opening feature"
+
+# Deploy with default message
+bash quick_deploy.sh
+```
+
+### Your New Workflow:
+1. 📝 Make changes to your code locally
+2. 🚀 Run: `bash quick_deploy.sh "What you changed"`
+3. ✨ Done! Your changes are live!
+
+**No more multiple commands, no more SSH, no more worrying!** The script handles everything automatically with built-in safety features.
+
+---
+
+### Alternative Options (Manual Methods)
+
+#### Option 1: Manual Safe Update
+```bash
+ssh root@159.65.140.136
+cd /var/www/chesstic
+sudo bash update.sh
+```
+This runs the safe update script with backup and rollback, but you need to push to GitHub first manually.
+
+#### Option 2: Run deploy.sh (Full Redeployment)
 ```bash
 ssh root@159.65.140.136
 sudo bash /var/www/chesstic/deploy.sh
 ```
+⚠️ Only use this for major changes or fresh installations.
 
-### Option 2: Quick Update (Code Only)
+#### Option 3: Quick Update (Code Only - Not Recommended)
 ```bash
 ssh root@159.65.140.136
 cd /var/www/chesstic
 sudo git pull origin main
 sudo systemctl restart chesstic
 ```
+⚠️ No backup or rollback - use at your own risk!
 
 ---
 
-## Useful Commands
+## 📊 Monitoring & Verification Tools
+
+### Check Dependencies Match Requirements.txt
+**From your local machine:**
+```bash
+bash verify_dependencies.sh
+```
+This will connect to your server and verify all packages are correctly installed.
 
 ### Check Application Status
 ```bash
@@ -142,11 +199,19 @@ sudo systemctl restart chesstic
 
 ### View Web Server Logs
 ```bash
-# Nginx error log
-sudo tail -f /var/log/nginx/chesstic_error.log
+# Nginx error log (Manual)
+```bash
+cd /var/www/chesstic
+sudo git pull origin main
+sudo systemctl restart chesstic
+```
 
-# Nginx access log
-sudo tail -f /var/log/nginx/chesstic_access.log
+### View Deployment Backups
+```bash
+# List all backups
+ssh root@159.65.140.136 'ls -lah /var/www/chesstic_backup_*'
+
+# The update script keeps the last 5 backups automaticallysstic_access.log
 ```
 
 ### Update Code from GitHub
@@ -208,23 +273,38 @@ sudo systemctl restart chesstic
 |------|----------|
 | Application code | `/var/www/chesstic/` |
 | Environment config | `/var/www/chesstic/.env` |
-| Service file | `/etc/systemd/system/chesstic.service` |
-| Nginx config | `/etc/nginx/sites-available/chesstic` |
-| Application logs | `sudo journalctl -u chesstic` |
-| Nginx logs | `/var/log/nginx/chesstic_*.log` |
-| Gunicorn logs | `/var/log/gunicorn/chesstic_*.log` |
+| S🔄 Emergency Rollback
 
----
+### Automatic Rollback
+The `quick_deploy.sh` and `update.sh` scripts **automatically rollback** if anything fails during deployment!
 
-## Emergency Rollback
-
-If something goes wrong, you can restore the backup:
+### Manual Rollback
+If you need to manually rollback to a previous version:
 
 ```bash
+# SSH to server
+ssh root@159.65.140.136
+
 # List available backups
 ls -lh /var/www/chesstic_backup_*
 
 # Stop current service
+sudo systemctl stop chesstic
+
+# Restore backup (replace timestamp with your backup)
+sudo rm -rf /var/www/chesstic
+sudo cp -r /var/www/chesstic_backup_YYYYMMDD_HHMMSS /var/www/chesstic
+
+# Fix permissions
+sudo chown -R www-data:www-data /var/www/chesstic
+
+# Restart service
+sudo systemctl start chesstic
+```
+
+### Quick Rollback Command
+```bash
+ssh root@159.65.140.136 'sudo systemctl stop chesstic && sudo rm -rf /var/www/chesstic && sudo cp -r /var/www/chesstic_backup_$(ls -t /var/www/ | grep chesstic_backup | head -1 | cut -d"_" -f3-) /var/www/chesstic && sudo chown -R www-data:www-data /var/www/chesstic && sudo systemctl start chesstic'
 sudo systemctl stop chesstic
 
 # Restore backup (replace timestamp with your backup)
