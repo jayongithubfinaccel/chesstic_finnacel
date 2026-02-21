@@ -1,6 +1,14 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <!-- Google Tag Manager -->
+    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+    })(window,document,'script','dataLayer','GT-NFBTKHBS');</script>
+    <!-- End Google Tag Manager -->
+    
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Analytics Dashboard - Chess Analytics</title>
@@ -9,6 +17,11 @@
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 </head>
 <body>
+    <!-- Google Tag Manager (noscript) -->
+    <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GT-NFBTKHBS"
+    height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+    <!-- End Google Tag Manager (noscript) -->
+    
     <nav class="navbar">
         <div class="container">
             <div class="nav-brand">
@@ -247,12 +260,16 @@
                         <p class="section-description">Your most frequently played openings</p>
                     </div>
                     <div class="opening-content">
-                        <div class="opening-section">
-                            <h4 class="opening-subtitle" id="commonOpeningsTitle">📊 Top Most Common Openings</h4>
-                            <div class="chart-container">
-                                <canvas id="commonOpeningsChart"></canvas>
-                            </div>
-                            <div class="opening-table" id="commonOpeningsTable"></div>
+                        <!-- White Openings Section (Iteration 5) -->
+                        <div class="opening-section" id="whiteOpeningsSection" style="display: none;">
+                            <h4 class="section-title">♔ Top Most Common Openings (White)</h4>
+                            <div class="opening-table" id="whiteOpeningsTable"></div>
+                        </div>
+                        
+                        <!-- Black Openings Section (Iteration 5) -->
+                        <div class="opening-section" id="blackOpeningsSection" style="display: none; margin-top: 30px;">
+                            <h4 class="section-title">♚ Top Most Common Openings (Black)</h4>
+                            <div class="opening-table" id="blackOpeningsTable"></div>
                         </div>
                     </div>
                 </div>
@@ -295,12 +312,17 @@
                     <div class="time-grid">
                         <div class="time-card" id="morningCard">
                             <h4>🌅 Morning</h4>
-                            <p class="time-subtitle">6:00 AM - 2:00 PM</p>
+                            <p class="time-subtitle">6:00 AM - 12:00 PM</p>
                             <div class="time-stats"></div>
                         </div>
                         <div class="time-card" id="afternoonCard">
                             <h4>☀️ Afternoon</h4>
-                            <p class="time-subtitle">2:00 PM - 10:00 PM</p>
+                            <p class="time-subtitle">12:00 PM - 6:00 PM</p>
+                            <div class="time-stats"></div>
+                        </div>
+                        <div class="time-card" id="eveningCard">
+                            <h4>🌆 Evening</h4>
+                            <p class="time-subtitle">6:00 PM - 10:00 PM</p>
                             <div class="time-stats"></div>
                         </div>
                         <div class="time-card" id="nightCard">
@@ -312,23 +334,19 @@
                 </div>
             </section>
 
-            <!-- Section 9: Mistake Analysis by Game Stage (Milestone 8) -->
+            <!-- Section 9: Move Analysis by Game Stage (v2.6) -->
             <section class="analytics-section" id="mistakeAnalysisSection" style="display: none;">
                 <div class="section-card">
                     <div class="section-header">
-                        <h3>🔍 Mistake Analysis by Game Stage</h3>
-                        <p class="section-description">Where you lose the most centipawns</p>
+                        <h3>🔍 Move Analysis by Game Stage</h3>
+                        <p class="section-description">Quality of your moves across different phases</p>
                     </div>
                     
-                    <!-- Summary Cards -->
+                    <!-- Summary Cards (v2.6: removed "Most Common Error") -->
                     <div class="mistake-summary" id="mistakeSummary">
                         <div class="mistake-summary-card">
                             <h4>Weakest Stage</h4>
                             <p class="mistake-highlight" id="weakestStage">-</p>
-                        </div>
-                        <div class="mistake-summary-card">
-                            <h4>Most Common Error</h4>
-                            <p class="mistake-highlight" id="mostCommonError">-</p>
                         </div>
                         <div class="mistake-summary-card">
                             <h4>Total Mistakes</h4>
@@ -336,19 +354,19 @@
                         </div>
                     </div>
                     
-                    <!-- Mistake Analysis Table -->
+                    <!-- Move Analysis Table (v2.6: updated column order) -->
                     <div class="table-container">
+                        <div class="table-header-text">
+                            <h4>Moves analysis</h4>
+                            <p class="table-subtitle">Average number of Mistake/Neutral/Brilliant moves per game</p>
+                        </div>
                         <table class="mistake-table" id="mistakeTable">
                             <thead>
                                 <tr>
-                                    <th>Game Stage</th>
-                                    <th>Total Moves</th>
-                                    <th>Inaccuracies</th>
-                                    <th>Mistakes</th>
-                                    <th>Blunders</th>
-                                    <th>Missed Opps</th>
-                                    <th>Avg CP Loss</th>
-                                    <th>Critical Mistake</th>
+                                    <th></th>
+                                    <th>Mistake</th>
+                                    <th>Neutral</th>
+                                    <th>Brilliant</th>
                                 </tr>
                             </thead>
                             <tbody id="mistakeTableBody">
@@ -358,16 +376,17 @@
                     </div>
                     
                     <div class="section-note">
-                        <p>⚙️ Powered by Stockfish engine analysis. Mistakes classified by centipawn loss: Inaccuracy (50-100cp), Mistake (100-200cp), Blunder (200+cp)</p>
+                        <p id="mistakeAnalysisSampleInfo" style="margin-bottom: 8px;">📊 Analyzing games...</p>
+                        <p>⚙️ Powered by Stockfish engine analysis. Move quality: Brilliant (≥+100cp gain), Neutral (-49 to +99cp), Mistake (≥-50cp loss)</p>
                     </div>
                 </div>
             </section>
 
-            <!-- Section 10: AI Chess Advisor (Milestone 9) -->
+            <!-- Section 10: AI Chess Advisor (v2.6: Simplified) -->
             <section class="analytics-section" id="aiAdvisorSection" style="display: none;">
                 <div class="section-card ai-advisor-card">
                     <div class="section-header">
-                        <h3>🤖 AI Chess Coach Recommendations</h3>
+                        <h3>🤖 AI Chess Coach - Personalized Analysis</h3>
                         <p class="section-description" id="aiAdvisorContext">Based on your comprehensive performance analysis</p>
                     </div>
                     
@@ -378,30 +397,14 @@
                         <p class="ai-loading-detail">This may take up to 10 seconds</p>
                     </div>
                     
-                    <!-- AI Advice Content -->
+                    <!-- AI Advice Content (v2.8: Section suggestions only) -->
                     <div class="ai-content" id="aiContent" style="display: none;">
-                        <!-- Section-Specific Suggestions -->
-                        <div class="ai-suggestions">
-                            <h4>📋 Key Suggestions:</h4>
-                            <ul id="aiSuggestionsList">
+                        <!-- Section-Specific Recommendations -->
+                        <div class="ai-sections">
+                            <h4>📋 Key Insights by Section:</h4>
+                            <div id="aiSectionsContainer">
                                 <!-- Populated by JavaScript -->
-                            </ul>
-                        </div>
-                        
-                        <!-- Overall Recommendation -->
-                        <div class="ai-overall">
-                            <h4>🎯 Overall Recommendation:</h4>
-                            <p id="aiOverallRecommendation"></p>
-                        </div>
-                        
-                        <!-- Regenerate Button -->
-                        <button class="btn-regenerate" id="btnRegenerateAdvice" style="display: none;">
-                            🔄 Regenerate Advice
-                        </button>
-                        
-                        <!-- Cost Info (dev only) -->
-                        <div class="ai-cost-info" id="aiCostInfo" style="display: none;">
-                            <small>Tokens used: <span id="tokensUsed">0</span> | Estimated cost: $<span id="estimatedCost">0.0000</span></small>
+                            </div>
                         </div>
                     </div>
                     

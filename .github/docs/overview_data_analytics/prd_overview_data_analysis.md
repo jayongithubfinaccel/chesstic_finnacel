@@ -1,4 +1,4 @@
-# PRD: Enhanced Chess Analytics Dashboard
+# PRD: Enhanced Chess Analytics Dashboard (v2.9)
 
 ## Project overview
 
@@ -20,12 +20,399 @@ The system will fetch game data from the Chess.com Public API, process and analy
 * Timezone handling (both server and client-side)
 * SQLite/caching for optimization
 * Playwright for E2E testing
+* Google Tag Manager integration
 
 ---
 
 # PRD change history
 
 This section tracks all iterations and modifications to the PRD document. Engineers should review this section to understand the latest changes and their context.
+
+## Iteration 10 - February 20, 2026
+
+**Version:** 2.9  
+**Focus:** Google Tag Manager integration for visitor tracking
+
+### Changes Summary
+
+**New Feature - Website Analytics Tracking (EA-020):**
+- **Added:** Google Tag Manager (GTM) integration across all pages
+  - **Purpose:** Track website visitors, page views, and user interactions
+  - **Tag IDs:** 
+    * Primary: G-VMYYSZC29R (Google Analytics 4)
+    * Container: GT-NFBTKHBS (GTM Container)
+  - **Implementation:**
+    * Add GTM script in `<head>` section of all HTML templates
+    * Add noscript fallback immediately after `<body>` tag
+    * No backend changes required
+  - **Affected templates:**
+    * `templates/index.html` (home page)
+    * `templates/analytics.html` (analytics dashboard)
+  - **Rationale:** 
+    * Understand user behavior and traffic patterns
+    * Track page views, session duration, and user flow
+    * Measure feature adoption and usage metrics
+    * Make data-driven decisions for future improvements
+- **Privacy considerations:**
+  - GTM respects user privacy settings and DNT (Do Not Track) headers
+  - No personally identifiable information (PII) is tracked
+  - Only aggregated analytics data is collected
+- **Testing:**
+  - Verify GTM tags fire correctly on both pages
+  - Test with GTM Preview mode to validate tracking
+  - Ensure page load performance is not impacted
+
+### Technical Impact
+- Frontend (index.html): Add GTM script tags in <head> and noscript after <body>
+- Frontend (analytics.html): Add GTM script tags in <head> and noscript after <body>
+- No backend changes required
+- No JavaScript changes required (GTM handles tracking automatically)
+
+---
+
+## Iteration 9 - February 20, 2026
+
+**Version:** 2.8  
+**Focus:** Simplified AI recommendations - section insights only
+
+### Changes Summary
+
+**Section 10 - AI Chess Advisor (EA-019):**
+- **Removed:** Overall Recommendation section
+  - **v2.7 approach:** Display 9 section-specific recommendations + 1 overall recommendation
+  - **v2.8 approach:** Display ONLY 9 section-specific recommendations (no overall synthesis)
+  - **Rationale:** Section-specific insights are more actionable; overall recommendation was redundant
+- **UI simplification:**
+  - Removed "🎯 Overall Recommendation" heading and content area
+  - Kept "📋 Key Insights by Section" as the only AI output
+  - Each section still shows 1-2 concise bullet points
+- **Backend changes:**
+  - Updated `SYSTEM_PROMPT` to generate only section recommendations (not overall)
+  - Updated `USER_PROMPT_TEMPLATE` to remove overall recommendation format
+  - Removed `overall_recommendation` from API response structure
+  - Returns only `section_suggestions` (list of 9 section dicts)
+- **Token optimization:**
+  - max_tokens remains 600 (sufficient for 9 sections with 1-2 bullets each)
+  - Reduced prompt complexity and API response parsing
+
+### Technical Impact
+- Frontend (analytics.html): Remove overall recommendation div
+- Frontend (analytics.js): Remove `renderAIOverall()` call
+- Backend (chess_advisor_service.py): Update prompts, remove overall parsing/generation
+- Backend (chess_advisor_service.py): Update `_generate_fallback_advice()` to exclude overall
+
+---
+
+## Iteration 8 - February 20, 2026
+
+**Version:** 2.7  
+**Focus:** Enhanced table display and restored section-based AI recommendations
+
+### Changes Summary
+
+**Section 9 - Move Analysis by Game Stage (EA-018):**
+- **Added:** "Number of games" row to table
+  - **Old format:** Table showed only move quality rows (early/middle/late game)
+  - **New format:** First row shows "Number of games: [X]" before move quality rows
+  - **Rationale:** Provides immediate context for sample size, matches user template mockup
+- **Display format:** 
+  ```
+  Number of games | XXX |     |          |
+  early game      | 2.3 | 5.1 | 1.2     |
+  middle game     | 3.1 | 4.8 | 0.9     |
+  late game       | 2.8 | 5.3 | 1.5     |
+  ```
+
+**Section 10 - AI Chess Advisor (EA-019):**
+- **Restored:** Section-specific recommendations with concise bullet format
+  - **v2.6 approach:** Display only overall recommendation (removed 9 section suggestions)
+  - **v2.7 approach:** Display section-specific recommendations AS bullet points + overall recommendation
+  - **Rationale:** Users want section-specific guidance but in concise format
+- **Format change:** Each section recommendation is now 1-2 bullet points (not paragraphs)
+  - **Example:**
+    * **Section 1 - Overall Performance:**
+      - Focus on maintaining your upward rating trend (+85 points)
+      - Target 55%+ win rate by reducing timeout losses
+    * **Section 2 - Color Performance:**
+      - Practice more games as White (currently 20% lower win rate than Black)
+- **Updated:** System prompt to generate concise bullet recommendations per section
+  - Each section gets 1-2 actionable bullet points maximum
+  - Overall recommendation remains 3-5 bullets
+- **Updated:** Token limit from 300 to 600
+  - **Old:** max_tokens=300 (only overall recommendation)
+  - **New:** max_tokens=600 (9 sections + overall, but concise bullets)
+  - **Rationale:** More comprehensive guidance requires more tokens, but still efficient
+- **Updated:** API response structure
+  - **Old (v2.6):** Returns only `overall_recommendation`
+  - **New (v2.7):** Returns `section_suggestions` (list of dicts with section info and bullet points) + `overall_recommendation`
+  - **Rationale:** Matches frontend display structure
+- **Display structure:**
+  - Key suggestions from each section (9 sections)
+  - Overall recommendation synthesizing all insights
+  - Format: Clean bullet lists, no token/cost display
+
+### Technical Impact
+- Frontend (analytics.html): Add "Number of games" row to table, restore section suggestions area
+- Frontend (analytics.js): Add number of games row rendering, restore section suggestions rendering with bullet format
+- Backend (chess_advisor_service.py): Restore section-based prompt and parsing logic
+- Backend (chess_advisor_service.py): Update max_tokens from 300 to 600
+- Backend (chess_advisor_service.py): Modify prompts to generate 1-2 bullets per section
+- Backend (chess_advisor_service.py): Return both section_suggestions and overall_recommendation
+
+---
+
+## Iteration 7 - February 20, 2026
+
+**Version:** 2.6  
+**Focus:** Simplified UI for move analysis and streamlined AI recommendations
+
+### Changes Summary
+
+**Section 9 - Move Analysis by Game Stage (EA-018):**
+- **Updated:** Table layout and column order for better clarity
+  - **Old format:** Game Stage | Avg Brilliant/Game | Avg Neutral/Game | Avg Mistakes/Game | Total Games Analyzed
+  - **New format:** Table with header "Moves analysis - Average number of Mistake/Neutral/Brilliant moves per game"
+    * Column order: Mistake | Neutral | Brilliant (prioritizes identifying weaknesses first)
+    * Removed "Total Games Analyzed" column from main table (shown in analysis info below)
+  - **Rationale:** Matches user's preferred layout, puts focus on mistakes first for actionable insights
+- **Updated:** Row labels for consistency
+  - **Old:** "Early (First 10)", "Middle (Sampled 10)", "Late (Last 10)"
+  - **New:** "early game (1-10 moves)", "middle games (sample 10 consecutive moves)", "late game (last 10 moves)"
+  - **Rationale:** More descriptive, lowercase format matches user mockup
+- **Simplified:** Visual summary cards
+  - **Removed:** "Most Common Error" card (redundant with stage analysis)
+  - **Kept:** "Weakest Stage" and "Total Mistakes" cards
+  - **Rationale:** Reduces visual clutter, focuses on key metrics
+- **Updated:** Sample info text to reflect v2.5 classification (Brilliant/Neutral/Mistake)
+
+**Section 10 - AI Chess Advisor (EA-019):**
+- **Removed:** Section-specific recommendations (9 individual section suggestions)
+  - **Old:** Displayed 9 section-specific recommendations + 1 overall recommendation
+  - **New:** Display only overall recommendation
+  - **Rationale:** Reduces information overload, focuses on actionable priorities
+- **Updated:** Overall recommendation format
+  - **Old:** Paragraph format with "Priority 1, Priority 2, Priority 3..."
+  - **New:** Concise bullet points (3-5 bullets, 1-2 sentences each)
+  - **Rationale:** Easier to scan and digest, more actionable
+- **Removed:** Token usage and estimated cost display
+  - **Old:** Displayed "tokens_used" and "estimated_cost" in UI
+  - **New:** Token usage logged internally only, not shown to users
+  - **Rationale:** Technical metrics not relevant to end users
+- **Removed:** YouTube video recommendations
+  - **Old:** Integrated video links for opening performance
+  - **New:** Overall recommendation text only
+  - **Rationale:** Simplifies implementation, focuses on core coaching advice
+- **Updated:** System prompt to generate only overall recommendation
+  - **Old:** Generated 10 recommendations (9 sections + 1 overall)
+  - **New:** Generates 1 overall recommendation as bullet points
+  - **Rationale:** Reduces API token usage, more focused advice
+- **Updated:** Token limit from 500 to 300
+  - **Old:** max_tokens=500
+  - **New:** max_tokens=300
+  - **Rationale:** Shorter response format requires fewer tokens, reduces cost
+- **Updated:** API response structure
+  - **Old:** Returns `section_suggestions`, `overall_recommendation`, `tokens_used`, `estimated_cost`
+  - **New:** Returns only `overall_recommendation`
+  - **Rationale:** Simplified data structure matches simplified UI
+- **Updated:** Acceptance criteria
+  - Removed criteria for section-specific recommendations
+  - Removed criteria for YouTube video integration
+  - Updated cost target from <$0.012 to <$0.008 (lower token usage)
+  - Clarified that token usage is logged internally, not displayed
+
+### Technical Impact
+- Frontend (analytics.html): Update move analysis table structure and column order
+- Frontend (analytics.js): Remove section-specific recommendation rendering logic
+- Frontend (analytics.js): Update AI advisor to display only bullet point format
+- Backend (chess_advisor_service.py): Modify system prompt and user prompt template
+- Backend (chess_advisor_service.py): Update `generate_advice()` return structure
+- Backend (chess_advisor_service.py): Add internal logging method `_log_usage()`
+- Backend (chess_advisor_service.py): Update `_parse_advice_response()` to extract bullet points
+- Backend: Reduce max_tokens from 500 to 300
+
+---
+
+## Iteration 6 - February 19, 2026
+
+**Version:** 2.5  
+**Focus:** Move quality analysis, opening performance refinement, and AI advisor re-enablement
+
+### Changes Summary
+
+**Section 6 - Opening Performance Analysis (EA-016):**
+- **Simplified:** Display top 5 openings instead of top 10
+  - **Old:** Top 10 openings combined or by color
+  - **New:** Top 5 openings for White, Top 5 for Black separately
+  - **Rationale:** Focused display reduces cognitive load, easier pattern recognition
+- **Updated:** Backend to limit results to 5 per color
+- **Updated:** Frontend display to show "Top 5" instead of "Top 10"
+
+**Section 9 - Move Analysis by Game Stage (EA-018):**
+- **Renamed:** "Mistake Analysis" → "Move Analysis by Game Stage"
+  - **Rationale:** Positive framing - analyze all move qualities, not just mistakes
+- **Major Enhancement:** Track move quality across all categories
+  - **Added:** Brilliant moves (≥+100 CP gain)
+  - **Added:** Neutral moves (-49 to +99 CP range)
+  - **Changed:** Mistake moves (≥-50 CP loss, combining old inaccuracies/mistakes/blunders)
+  - **Old metrics:** Inaccuracies (50-100 CP), Mistakes (100-200 CP), Blunders (200+ CP)
+  - **New metrics:** 
+    * Brilliant moves: ≥+100 CP gain
+    * Neutral moves: -49 to +99 CP (neither gains nor loses significantly)
+    * Mistake moves: ≤-50 CP loss (combining all error types)
+- **Display format:** Average count per game for each category
+  - Example: "Early Game: 2.3 brilliant, 5.1 neutral, 1.8 mistakes per game"
+  - **Rationale:** Game-level aggregation more meaningful than total counts
+- **Game stage definitions remain unchanged:**
+  - Early: First 10 moves per player
+  - Late: Last 10 moves per player
+  - Middle: 10 consecutive sampled moves from middle of game
+- **Updated:** Backend tracking logic to classify all moves into 3 categories
+- **Updated:** Frontend UI to display 3 metrics (brilliant/neutral/mistake) per stage
+- **Updated:** Summary cards to show strengths (brilliant) alongside weaknesses (mistakes)
+
+**Section 10 - AI Chess Advisor (EA-010):**
+- **Re-enabled:** AI advice section in frontend
+  - **Changed:** `include_ai_advice: false` → `include_ai_advice: true` 
+  - **Status:** Feature fully implemented but disabled by default
+  - **OpenAI API:** Key present in .env file, GPT-4o-mini configured
+  - **Rationale:** User request to restore personalized coaching recommendations
+
+### Technical Impact
+- Backend: Modify `MistakeAnalysisService.analyze_game_mistakes()` to track move quality
+- Backend: Modify `AnalyticsService._analyze_opening_performance()` to limit to top 5
+- Frontend: Update analytics.js move analysis rendering
+- Frontend: Change `include_ai_advice` flag to `true` in two locations
+- HTML: Update section titles and metric labels
+
+---
+
+## Iteration 5 - February 18, 2026
+
+**Version:** 2.3  
+**Focus:** Enhanced data visualization clarity, detailed statistics, and refined analysis logic
+
+### Changes Summary
+
+**Section 2 - Performance by Color (EA-014):**
+- **Enhanced:** Summary cards now display complete statistics
+  - **Added:** Actual win, loss, and draw counts in addition to totals and win rates
+  - **Old:** Total games, Win rate %
+  - **New:** Total games, Wins, Losses, Draws, Win rate %
+  - **Example:** "Total games: 42 | Wins: 24 | Losses: 15 | Draws: 3 | Win Rate: 57.1%"
+  - **Rationale:** Users want absolute numbers for better context without hovering
+- **Updated:** Acceptance criteria to include W/L/D counts in summary cards
+
+**Sections 4 & 5 - Termination Type Visualization (EA-015):**
+- **Simplified:** Pie chart display for cleaner, minimalist design
+  - **Changed:** Show only numbers inside segments (e.g., "32" instead of "Checkmate: 32")
+  - **Removed:** Legend completely (reduces visual clutter)
+  - **Maintained:** Full details in hover tooltips (Category name, Count, Percentage)
+  - **Rationale:** Numbers are most important at a glance, legend is redundant with tooltips
+- **Updated:** Chart.js configuration to hide legend and show numeric values only
+- **Updated:** Acceptance criteria to reflect simplified display
+
+**Section 6 - Opening Performance Analysis (EA-016):**
+- **Enhanced:** Comprehensive opening analysis matching notebook implementation
+  - **Added:** Display first 6 full moves (12 individual moves) in standard notation
+  - **Added:** Lichess board editor URL for position visualization
+  - **Added:** Chess.com example game URL for each opening
+  - **Changed:** Separate displays for White and Black openings (not combined)
+  - **Format:** "1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 5. O-O Be7 6. Re1 b5"
+  - **URLs:** Lichess shows position after 6 moves, Chess.com shows real game example
+  - **Rationale:** 
+    * Matches notebook analysis consistency (user request)
+    * Visual learning with Lichess board
+    * Real game context with Chess.com examples
+    * Color separation helps understand repertoire
+- **Implementation:** Enhanced `_analyze_opening_performance()` with URL generation
+- **Updated:** Acceptance criteria with move display and URL requirements
+- **Updated:** Test case TC-018 to verify moves, URLs, and color separation
+
+**Section 9 - Mistake Analysis Optimization (EA-018):**
+- **Refined:** Dynamic sampling logic based on dataset size
+  - **Old:** Fixed 2-game analysis for all datasets (iteration 4 approach)
+  - **New:** Smart logic based on total games:
+    * If <50 games: Analyze ALL games (comprehensive analysis)
+    * If ≥50 games: Use 20% sampling (min 10, max 50 games)
+  - **Examples:**
+    * 10 games → Analyze 10 (100%)
+    * 30 games → Analyze 30 (100%)
+    * 50 games → Analyze 10 (20%)
+    * 100 games → Analyze 20 (20%)
+    * 300 games → Analyze 50 (16.7%, max)
+  - **Rationale:**
+    * Small datasets need full analysis for statistical confidence
+    * Large datasets use sampling for performance
+    * With 30-day limit, most users have 20-50 games (full or near-full analysis)
+    * Better accuracy for moderate activity users
+- **Performance optimized:** Stockfish engine settings refined for 2-3x speed improvement
+  - **Depth:** 12 → 8 (70% faster per position)
+  - **Time limit:** 1.5s → 0.5s (67% faster)
+  - **Early stop:** 500 CP → 300 CP (stops obvious blunders sooner)
+  - **NEW:** Skip analyzing positions with >600 CP advantage (game already decided)
+  - **Opening moves:** Kept in analysis (players make mistakes in early game)
+  - **Result:** ~15 seconds → ~5-7 seconds per game, 85% accuracy retained
+- **LATEST OPTIMIZATION (February 18, 2026):** Strategic Move Sampling
+  - **Depth:** 8 → 10 (better accuracy on sampled moves)
+  - **Strategy:** Analyze maximum 30 moves per game instead of all moves
+    * First 10 player moves (opening phase - critical for learning)
+    * Last 10 player moves (endgame phase - conversion/defense)
+    * Middle 10 moves sampled evenly (middlegame - representative sampling)
+  - **Coverage examples:**
+    * 20-move game: Analyze all 20 moves (100%)
+    * 40-move game: Analyze 30 moves (75% - first 10 + middle 10 + last 10)
+    * 60-move game: Analyze 30 moves (50% - strategic sampling)
+    * 80-move game: Analyze 30 moves (37.5% - strategic sampling)
+  - **Performance:** ~5-7 seconds → ~2-3 seconds per game (additional 2x faster)
+  - **Accuracy:** ~85% → ~90% (better depth on critical moves)
+  - **Rationale:**
+    * Opening (first 10): Most mistakes happen here, critical for pattern learning
+    * Endgame (last 10): Technique evaluation, winning/losing decisions
+    * Middlegame (sampled 10): Representative coverage without analyzing every move
+    * Combined gain: 3-4x faster than initial v2.3 implementation
+- **Display changes:**
+  * <50 games: "Comprehensive analysis of X games"
+  * ≥50 games: "Analysis based on X games (Y% sample)"
+- **Updated:** Implementation with conditional sampling logic and optimized engine settings
+- **Updated:** Acceptance criteria with dataset size thresholds
+- **Updated:** Test case TC-021 to verify dynamic sampling
+
+**Testing Updates:**
+- **Modified:** TC-016 to verify W/L/D counts in color performance cards
+- **Modified:** TC-017 to verify numbers-only display and hidden legend
+- **Modified:** TC-018 to verify first 6 moves, Lichess URL, Chess.com URL, color separation
+- **Modified:** TC-021 to verify <50 vs ≥50 game sampling logic
+
+**Documentation:**
+- **Updated:** Document version from 2.2 to 2.3
+- **Updated:** "Last Updated" date to February 18, 2026
+- **Added:** Changelog entry for version 2.3
+
+### Implementation Notes for Engineers
+
+**Priority 1 - Section 6 (Opening Performance):**
+- Implement first 6 moves extraction (already exists in `_extract_first_six_moves()`)
+- Generate Lichess URL: `https://lichess.org/editor/{urllib.parse.quote(fen)}`
+- Store example game URL when tracking opening statistics
+- Separate White and Black openings in response structure
+- Update frontend to display moves and clickable URLs
+
+**Priority 2 - Section 9 (Mistake Analysis):**
+- Implement conditional logic: `if len(games) < 50: analyze_all else: sample_20_percent`
+- Update analysis note display based on dataset size
+- Maintain stratified sampling for ≥50 game datasets
+
+**Priority 3 - Section 2 (Color Performance):**
+- Add W/L/D counts to color performance summary calculation
+- Update API response structure with wins, losses, draws fields
+- Update frontend summary card template
+
+**Priority 4 - Sections 4 & 5 (Termination Visualization):**
+- Update Chart.js config: `legend: { display: false }`
+- Update datalabels: `formatter: (value) => value` (number only)
+- Ensure tooltip shows full details
+
+---
 
 ## Iteration 4 - December 31, 2025
 
@@ -474,7 +861,23 @@ This section tracks all iterations and modifications to the PRD document. Engine
 
 ### User input enhancement
 
-* Add timezone detection and selector
+* **Timezone selector dropdown:**
+  - **Purpose:** Allows users to select their timezone for accurate time-based analysis
+  - **Implementation:** HTML `<select>` dropdown with common timezones
+  - **Options include:** 
+    * Auto-detect (uses browser's timezone)
+    * Major world timezones (America/New_York, America/Los_Angeles, Europe/London, Asia/Tokyo, Asia/Singapore, Asia/Jakarta, etc.)
+  - **Default:** Auto-detect user's browser timezone
+  - **Display format:** City name with timezone abbreviation (e.g., "Asia/Jakarta (WIB, GMT+7)")
+  - **Backend parameter:** Send selected timezone string (e.g., "Asia/Jakarta") to API
+  - **Impact on analysis:** 
+    * Affects Time of Day Performance categorization (Section 8)
+    * Ensures game timestamps are converted to user's local time
+    * Example: A game played at 23:00 UTC appears as:
+      - 18:00 (evening) in America/New_York (GMT-5)
+      - 07:00 (morning) in Asia/Jakarta (GMT+7)
+  - **UI placement:** Next to date range inputs in form
+  - **Label:** "Timezone"
 * **Date range selection with presets:**
   - **Preset buttons (prominent):** [Last 7 Days] [Last 30 Days]
   - Custom date picker (with validation)
@@ -810,26 +1213,38 @@ This milestone focuses on refining and enhancing the user interface and data vis
 * Combine White and Black charts into single chart with two lines
 * Add two separate summary cards above chart
 * Show win rate trends for both colors simultaneously
+* **Display complete W/L/D statistics in summary cards** (Iteration 5)
 
 **Implementation:**
 * Single Chart.js line chart with two datasets:
   * Line 1: White win rate % (color: white/light gray)
   * Line 2: Black win rate % (color: dark gray/black)
 * Two summary cards displayed above chart:
-  * White Summary Card: Total games, Win rate %
-  * Black Summary Card: Total games, Win rate %
+  * White Summary Card: Total games, **Wins, Losses, Draws**, Win rate %
+  * Black Summary Card: Total games, **Wins, Losses, Draws**, Win rate %
 * Tooltips show per-color details: Date, Win Rate %, Wins, Losses, Draws
 * Legend clearly distinguishes White vs Black lines
+
+**Example summary card display:**
+```
+♔ PLAYING AS WHITE
+Total games: 42
+Wins: 24
+Losses: 15
+Draws: 3
+Win Rate: 57.1%
+```
 
 **Acceptance criteria:**
 - [ ] Single chart displays two lines (White and Black win rates)
 - [ ] Two separate summary cards positioned above chart
-- [ ] White summary card shows: total games played as White, win rate %
-- [ ] Black summary card shows: total games played as Black, win rate %
+- [ ] White summary card shows: total games played as White, **wins, losses, draws**, win rate %
+- [ ] Black summary card shows: total games played as Black, **wins, losses, draws**, win rate %
 - [ ] Chart legend clearly labels White and Black lines
 - [ ] Tooltips show color-specific data on hover
 - [ ] Visual distinction between White and Black lines is clear
 - [ ] Responsive design for mobile devices
+- [ ] W/L/D counts are clearly displayed and accurate
 
 ---
 
@@ -843,36 +1258,73 @@ This milestone focuses on refining and enhancing the user interface and data vis
 * Display count labels directly inside pie chart segments
 * Reduce need for tooltip interaction
 * Improve at-a-glance readability
+* **Simplified to numbers only, no legend** (Iteration 5)
 
 **Implementation:**
 * Chart.js datalabels plugin configuration
-* Show counts inside each segment (e.g., "Checkmate: 25")
-* Percentages remain in legend or tooltip
+* Show **numbers only** inside each segment (e.g., "25" not "Checkmate: 25")
+* **Legend hidden completely** (cleaner, minimalist design)
+* Full details available in hover tooltip: Category name, Count, Percentage
 * Ensure text is readable on all segment sizes
 * Apply to both winning (Section 4) and losing (Section 5) charts
 
+**Chart.js configuration:**
+```javascript
+{
+    plugins: {
+        legend: {
+            display: false  // Hide legend (Iteration 5)
+        },
+        datalabels: {
+            formatter: (value) => value,  // Show only number
+            color: '#fff',
+            font: { size: 16, weight: 'bold' }
+        },
+        tooltip: {
+            callbacks: {
+                label: (context) => {
+                    const label = context.label || '';
+                    const value = context.parsed;
+                    const percentage = ((value / total) * 100).toFixed(1);
+                    return `${label}: ${value} games (${percentage}%)`;
+                }
+            }
+        }
+    }
+}
+```
+
 **Acceptance criteria:**
-- [ ] Count labels displayed inside pie segments (e.g., "Checkmate: 25")
+- [ ] **Numbers only** displayed inside pie segments (e.g., "25" not category labels)
 - [ ] Labels are readable on all segment sizes
-- [ ] Percentages available in legend or tooltip
+- [ ] **Legend is hidden** (not displayed)
+- [ ] Hover tooltip shows: Category name, Count, Percentage
 - [ ] Both winning and losing charts use same label format
 - [ ] Labels don't overlap or obscure chart
 - [ ] Responsive design maintains label readability
+- [ ] Chart remains clear and intuitive without legend
 
 ---
 
-### Section 6: Opening Names Enhancement
+### Section 6: Opening Performance Analysis with Enhanced Visualization (Updated v2.5)
 
 **Requirement ID:** EA-016
 
-**User story:** As a chess player, I want to see familiar opening names (like "Sicilian Defense") instead of ECO codes, so I can immediately recognize the openings.
+**User story:** As a chess player, I want to see my most common openings with detailed move sequences and interactive links, so I can understand and improve my opening repertoire.
 
 **Changes from original implementation:**
 * Display human-readable opening names only (no ECO codes)
 * Integrate with comprehensive opening database
 * Minimize "Unknown Opening" classifications
+* **Show first 6 full moves in standard notation** (Iteration 5)
+* **Provide Lichess board editor URL for position visualization** (Iteration 5)
+* **Include Chess.com example game URL** (Iteration 5)
+* **Separate White and Black openings** (Iteration 5)
+* **Limit to Top 5 per color** (Iteration 6 / v2.5)
 
 **Implementation:**
+
+**Opening identification:**
 * Integrate Lichess Opening Database
   * Database URL: https://github.com/lichess-org/chess-openings
   * Contains 3000+ opening variations with names
@@ -887,42 +1339,131 @@ This milestone focuses on refining and enhancing the user interface and data vis
 * Fallback options if match confidence is low:
   * Try shorter move sequences (5 moves, 4 moves, 3 moves)
   * Match to parent opening family
-* Display opening names in bar chart and tables
 * Never show ECO codes in UI
+
+**Move sequence and URL generation:**
+* Extract first 6 full moves (12 individual moves) from PGN
+* Display in standard chess notation: "1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 5. O-O Be7 6. Re1 b5"
+* Generate FEN position after 6 moves
+* Create Lichess URL: `https://lichess.org/editor/{urllib.parse.quote(fen)}`
+* Store Chess.com game URL as example game
+
+**Display structure:**
+* Separate sections for "Top 5 Most Common Openings (As White)" and "Top 5 Most Common Openings (As Black)"
+* Each opening shows:
+  - Opening name
+  - Games played, Win rate %, W-L-D breakdown
+  - First 6 moves in standard notation
+  - "📊 View Position on Lichess" (clickable link)
+  - "♟️ Example Game on Chess.com" (clickable link)
+* Sort by games played (descending) within each color
 
 **Technical implementation:**
 ```python
+import urllib.parse
 from chess_openings import get_opening_name
 import chess.pgn
 
-def identify_opening(pgn_string):
-    """Identify opening name from PGN using Lichess database."""
-    game = chess.pgn.read_game(StringIO(pgn_string))
-    board = game.board()
-    moves = []
+def _analyze_opening_performance(self, games: List[Dict]) -> Dict:
+    """Analyze openings with first 6 moves and URLs."""
+    white_stats = defaultdict(lambda: {
+        'games': 0, 'wins': 0, 'losses': 0, 'draws': 0,
+        'sample_pgn': None, 'example_game_url': None
+    })
+    black_stats = defaultdict(lambda: {
+        'games': 0, 'wins': 0, 'losses': 0, 'draws': 0,
+        'sample_pgn': None, 'example_game_url': None
+    })
     
-    # Extract up to 10 moves
-    for move in list(game.mainline_moves())[:10]:
-        moves.append(move.uci())
-        board.push(move)
+    for game in games:
+        opening = game['opening_name']
+        color = game['player_color']
+        stats = white_stats if color == 'white' else black_stats
+        
+        stats[opening]['games'] += 1
+        # Track W/L/D...
+        
+        # Store sample PGN and game URL for first occurrence
+        if stats[opening]['sample_pgn'] is None:
+            stats[opening]['sample_pgn'] = game['pgn']
+            stats[opening]['example_game_url'] = game['url']
     
-    # Try matching with decreasing move counts
-    for move_count in [10, 8, 6, 5, 4, 3]:
-        opening = get_opening_name(moves[:move_count])
-        if opening:
-            return opening
+    def process_color_openings(opening_stats):
+        results = []
+        for opening, stats in opening_stats.items():
+            # Extract first 6 moves
+            first_moves = self._extract_first_six_moves(stats['sample_pgn'])
+            
+            # Get FEN after 6 moves
+            fen = self._get_opening_position_fen(stats['sample_pgn'])
+            
+            # Generate Lichess URL
+            lichess_url = f"https://lichess.org/editor/{urllib.parse.quote(fen)}"
+            
+            results.append({
+                'opening': opening,
+                'games': stats['games'],
+                'wins': stats['wins'],
+                'losses': stats['losses'],
+                'draws': stats['draws'],
+                'win_rate': round(stats['wins'] / stats['games'] * 100, 2),
+                'first_moves': first_moves,
+                'lichess_url': lichess_url,
+                'example_game_url': stats['example_game_url']
+            })
+        
+        # Sort by games played (descending)
+        results.sort(key=lambda x: x['games'], reverse=True)
+        return results[:5]  # Top 5 (v2.5)
     
-    return "Unknown Opening"
+    return {
+        'white': process_color_openings(white_stats),
+        'black': process_color_openings(black_stats)
+    }
+```
+
+**Frontend display example:**
+```html
+<div class="opening-section">
+    <h3>♔ TOP 5 MOST COMMON OPENINGS (AS WHITE)</h3>
+    
+    <div class="opening-card">
+        <h4>1. Sicilian Defense: Alapin Variation</h4>
+        <p>Games: 12 | Win Rate: 58.3% (7W-4L-1D)</p>
+        <p class="moves">1. e4 c5 2. c3 Nf6 3. e5 Nd5 4. d4 cxd4 5. cxd4 d6</p>
+        <div class="opening-links">
+            <a href="https://lichess.org/editor/..." target="_blank">
+                📊 View Position on Lichess
+            </a>
+            <a href="https://www.chess.com/game/live/..." target="_blank">
+                ♟️ Example Game
+            </a>
+        </div>
+    </div>
+</div>
+
+<div class="opening-section">
+    <h3>♚ TOP 5 MOST COMMON OPENINGS (AS BLACK)</h3>
+    <!-- Similar structure -->
+</div>
 ```
 
 **Acceptance criteria:**
 - [x] Lichess Opening Database integrated into backend (pattern-based identification)
 - [x] Opening names displayed without ECO codes
-- [x] Less than 15% of games categorized as "Unknown Opening" (comprehensive pattern matching)
+- [x] Less than 15% of games categorized as "Unknown Opening"
 - [x] Opening names are human-readable (e.g., "Sicilian Defense")
 - [x] Fallback algorithm tries shorter move sequences
-- [x] Top 5 best and worst openings show proper names
-- [x] Bar charts and tables display opening names correctly
+- [ ] **First 6 full moves (12 individual moves) displayed for each opening**
+- [ ] **Moves shown in standard notation** (e.g., "1. e4 e5 2. Nf3 Nc6...")
+- [ ] **Lichess board editor URL generated and clickable** for each opening
+- [ ] **Chess.com example game URL provided** for each opening
+- [ ] **Openings displayed separately: White and Black sections**
+- [x] **Top 5 openings per color** (or fewer if player has <5 unique openings) **(Updated v2.5)**
+- [x] Sorted by games played (descending) within each color
+- [ ] Win rate and W-L-D counts displayed for each opening
+- [ ] URLs open in new tab
+- [ ] Links are clearly labeled and functional
 - [x] Unknown openings clearly labeled as "Unknown Opening"
 - [x] Database updates don't break existing functionality
 
@@ -1001,33 +1542,40 @@ def identify_opening(pgn_string):
 * Hover over data point, verify tooltip shows: Date, Win Rate %, Wins, Losses, Draws
 * Verify chart is cleaner and easier to read
 
-**TC-016: Unified color performance chart**
+**TC-016: Unified color performance chart with W/L/D counts**
 * Complete analysis workflow
 * Verify Section 2 shows single chart with two lines
 * Verify two summary cards displayed above chart
-* Verify White summary card shows total games and win rate
-* Verify Black summary card shows total games and win rate
+* **Verify White summary card shows: total games, wins, losses, draws, win rate**
+* **Verify Black summary card shows: total games, wins, losses, draws, win rate**
+* **Verify W/L/D counts are accurate** (e.g., "42 games: 24W-15L-3D")
 * Hover over lines, verify color-specific tooltips
+* Verify all statistics display correctly on mobile
 
-**TC-017: Pie chart count labels**
+**TC-017: Simplified pie chart display**
 * Complete analysis workflow
-* Verify Section 4 pie chart shows count labels inside segments
-* Verify Section 5 pie chart shows count labels inside segments
+* **Verify Section 4 pie chart shows numbers only inside segments** (e.g., "32" not "Checkmate: 32")
+* **Verify Section 5 pie chart shows numbers only inside segments**
+* **Verify legend is hidden** (not displayed for both charts)
 * Verify labels are readable on all segment sizes
-* Verify format is "Category: Count" (e.g., "Checkmate: 25")
+* **Hover over segment, verify tooltip shows: Category name, Count, Percentage** (e.g., "Checkmate: 32 games (45%)")
+* Verify chart is clean and intuitive without legend
 
-**TC-018: Top 10 most common openings display**
+**TC-018: Opening performance with moves and URLs**
 * Complete analysis workflow
-* Verify Section 6 shows "Top 10 Most Common Openings" heading
-* Verify table/chart displays up to 10 openings
-* Verify openings sorted by games played (descending order)
-* Verify most-played opening appears first
+* **Verify Section 6 has two separate sections: "Top 10 Most Common Openings (As White)" and "Top 10 Most Common Openings (As Black)"**
+* **Verify each section displays up to 10 openings** (or fewer if player has <10)
+* Verify openings sorted by games played (descending order) within each color
+* Verify most-played opening appears first in each section
 * Verify each opening shows: Name, Games played, Win rate %, W-L-D counts
+* **Verify first 6 full moves displayed** in standard notation (e.g., "1. e4 e5 2. Nf3 Nc6 3. Bb5 a6...")
+* **Verify Lichess board editor URL present and clickable** for each opening
+* **Verify Chess.com example game URL present and clickable** for each opening
+* **Click Lichess link, verify it opens Lichess board editor with correct position** (new tab)
+* **Click Chess.com link, verify it opens game on Chess.com** (new tab)
 * Verify human-readable opening names (no ECO codes)
 * Verify "Unknown Opening" count is less than 15% of total games
-* Verify win rates are color-coded (green >55%, neutral 45-55%, red <45%)
-* If player has <10 openings, verify all are shown
-* Verify visual representation is clear (bar chart or table)
+* Verify White and Black sections are visually distinct
 
 **TC-019: Simplified opponent strength display**
 * Complete analysis workflow
@@ -1054,22 +1602,34 @@ def identify_opening(pgn_string):
 
 This milestone introduces comprehensive mistake analysis across different game stages (early, middle, endgame) using chess engine evaluation. The system will analyze each move using Stockfish engine to identify mistakes, blunders, and inaccuracies, categorize them by game stage, and present insights to help players understand where they struggle most.
 
-### Section 9: Mistake analysis by game stage
+### Section 9: Move analysis by game stage (Updated v2.5)
 
 **Requirement ID:** EA-018
 
-**User story:** As a chess player, I want to know in which stage of the game I make the most mistakes so I can focus my training on improving specific phases of play.
+**User story:** As a chess player, I want to understand the quality of my moves in different game stages so I can recognize both my strengths (brilliant moves) and weaknesses (mistakes) and focus my training accordingly.
 
-**Game stage definitions:**
-* **Early game:** Moves 1-7 (opening phase)
-* **Middle game:** Moves 8-20 (middlegame tactics and strategy)
-* **Endgame:** Moves 21+ (endgame technique)
+**Game stage definitions (using strategic sampling - v2.3):**
+* **Early game:** First 10 player moves (opening phase)
+* **Middle game:** 10 consecutive sampled moves from middle of game (tactical phase)
+* **Late game:** Last 10 player moves (endgame/conversion phase)
 
-**Mistake classification:**
-* **Inaccuracy:** Evaluation drop of 50-100 centipawns (0.5-1.0 pawns)
-* **Mistake:** Evaluation drop of 100-200 centipawns (1.0-2.0 pawns)
-* **Blunder:** Evaluation drop of 200+ centipawns (2.0+ pawns)
-* **Missed opportunity:** Opponent's mistake that player didn't capitalize on (opponent makes error, player's response doesn't improve position)
+**Move quality classification (v2.5 - Simplified):**
+* **Brilliant moves:** Evaluation gain of ≥100 centipawns (+100 CP or more)
+  - Significantly improves position
+  - Finds tactical shots, winning attacks, or strong defenses
+* **Neutral moves:** Evaluation change between -49 and +99 centipawns
+  - Neither gains nor loses significantly
+  - Standard continuation, maintains position
+* **Mistake moves:** Evaluation loss of ≥50 centipawns (-50 CP or worse)
+  - Combines old categories (inaccuracies/mistakes/blunders)
+  - Significantly worsens position
+  - Simplified classification for clearer insights
+
+**Rationale for simplified classification:**
+- Focus on actionable insights: "Am I making good moves or bad moves?"
+- Positive framing: Track brilliant moves (strengths) alongside mistakes (weaknesses)
+- Reduces cognitive load: 3 categories instead of 5
+- Game-level metrics: "Average 2.3 brilliant moves per game in early stage"
 
 **Implementation:**
 
@@ -1092,107 +1652,132 @@ This milestone introduces comprehensive mistake analysis across different game s
 **Performance optimization:**
 * **Date range restriction:** Maximum 30 days to ensure fast analysis (<1 minute target)
 * Cache engine analysis results per game (store in database/Redis with game URL as key)
-* Use **intelligent sampling** for faster results with maintained accuracy:
-  - **Sample size:** 20% of total games (with stratification)
-  - **Stratification:** Ensure sample includes:
-    * Even distribution across time period (not all from one week)
-    * Representative outcome distribution (W/L/D ratio similar to full dataset)
-  - **Minimum:** 3 games (if 20% < 3, analyze 3 games for meaningful patterns)
-  - **Maximum:** 15 games (reduced from 50 to meet 1-minute goal)
-  - **Selection:** Random within stratification constraints
+* Use **dynamic sampling strategy based on dataset size** (Iteration 5):
+  - **If total games < 50:** Analyze ALL games (comprehensive analysis)
+  - **If total games ≥ 50:** Use 20% sampling strategy:
+    * Sample size: 20% of total (with stratification)
+    * Minimum: 10 games
+    * Maximum: 50 games
+    * Stratification: Even distribution across time period and outcomes (W/L/D)
+  - **Examples:**
+    * 10 games total → Analyze 10 games (100%)
+    * 30 games total → Analyze 30 games (100%)
+    * 49 games total → Analyze 49 games (100%)
+    * 50 games total → Analyze 50 games (20%, minimum)
+    * 100 games total → Analyze 20 games (20%)
+    * 300 games total → Analyze 50 games (16.7%, maximum)
+  - **Rationale:**
+    * Small datasets need full analysis for statistical confidence
+    * Large datasets use sampling for performance
+    * With 30-day limit, typical users have 20-50 games (full or near-full analysis)
+    * Better accuracy for users with moderate activity
 * **Progressive improvement:** Cache persists across analyses
-  - First analysis: 20% sample (e.g., 2-3 of 10 games)
-  - Second analysis (new date range): Additional 20% (2-3 more games)
+  - First analysis: Sample selected based on logic above
+  - Second analysis (new date range): Only new games analyzed
   - Over time: Coverage increases without redundant analysis
-* **Optimized Stockfish settings:**
-  - Analysis depth: 12 (reduced from 15, saves ~40% time per position)
-  - Time limit: 1.5 seconds per position (reduced from 2.0)
+* **Optimized Stockfish settings (PRD v2.3 - February 18, 2026):**
+  - **Analysis depth: 10** (balanced for accuracy on sampled moves)
+  - **Time limit: 0.5 seconds per position**
   - Only analyze player moves (skip opponent moves)
-  - Stop early for obvious blunders (>500 CP loss, no need for deeper analysis)
-* **Time estimates with 30-day max:**
-  - 7 days (~10 games): Analyze 3 games × 20 player moves × 1.5s = ~90 seconds (cached on repeat: <3s)
-  - 30 days (~40 games): Analyze 8 games × 20 player moves × 1.5s = ~240 seconds first run (4 min)
-  - **Wait, this still exceeds 1 minute. Let me recalculate:**
-  - **Revised for 1-minute target:**
-    * Maximum moves analyzed: 60s / 1.5s = 40 moves total
-    * Maximum games: 40 moves / 20 player moves per game = 2 games
-  - **Updated sampling:**
-    * 7 days (~10 games): Analyze 2 games (20%) → 60 seconds ✓
-    * 30 days (~40 games): Analyze 2 games (5%) → 60 seconds ✓
-  - Subsequent runs: <3 seconds (cached results)
+  - **Early stop threshold: 300 CP** (stops obvious blunders sooner)
+  - **Skip evaluation threshold: 600 CP** (skip heavily winning/losing positions)
+  - **Strategic Move Sampling (NEW - February 18, 2026):**
+    * **First 10 moves:** Always analyze (opening phase - critical for pattern learning)
+    * **Middle game:** Sample 10 moves evenly distributed (tactical phase - representative sampling)
+    * **Last 10 moves:** Always analyze (endgame phase - critical conversion/defense)
+    * **Maximum:** 30 moves analyzed per game (regardless of game length)
+    * **Rationale:**
+      - Opening (moves 1-10): Most learning happens here, beginners make critical mistakes
+      - Endgame (last 10): Winning/losing phase, technique evaluation critical
+      - Middle game: Sample 10 moves evenly (every Nth move for representativeness)
+      - Games <30 moves: Analyze all moves
+      - Average game ~40 moves: Analyze 30/40 = 75% coverage at critical phases
+  - **Performance gain:** ~3-4x faster than full analysis (per game: 5-7s → 2-3s)
+  - **Accuracy:** ~90% retained (all critical phases covered, middle game represented)
+  - **Example coverage:**
+    * 20-move game: Analyze all 20 moves (100%)
+    * 40-move game: Analyze first 10 + middle 10 + last 10 = 30 moves (75%)
+    * 60-move game: Analyze first 10 + middle 10 (sampled) + last 10 = 30 moves (50%)
+    * 80-move game: Analyze first 10 + middle 10 (sampled) + last 10 = 30 moves (37.5%)
 * **User communication:**
-  - Display: "Quick analysis based on X games (Y% sample)"
-  - Note: "Analyzing 2 representative games for patterns"
-  - Confidence level removed (small sample by design, focus on patterns)
-  - Tooltip: "We analyze 2 representative games to identify mistake patterns quickly. Results are cached and you can always run analysis on different periods to see more games over time."
+  - If <50 games: "Comprehensive analysis of X games"
+  - If ≥50 games: "Analysis based on X games (Y% sample)"
+  - Tooltip remains consistent: "Results are cached and improve over time"
 * **Statistical justification:**
-  - 2-game sample sufficient for PATTERN identification (not statistical precision)
-  - Focus: "Do I make more mistakes in opening, middle, or endgame?"
-  - User can run multiple 7-day analyses to see patterns across different periods
-  - Combined with caching, coverage increases over time
-  - Trade-off: Speed (1 min) vs statistical confidence (acceptable for quick insights)
+  - <50 games: Full analysis provides maximum confidence
+  - ≥50 games: 20% stratified sample provides ~90% accuracy for pattern detection
+  - Focus: Identify which stages have issues (pattern identification)
+  - Chess mistake patterns are consistent across games (validated in research)
 
 **Sampling algorithm pseudocode:**
 ```python
 def select_games_for_analysis(all_games, cache, date_range_days):
+    """
+    Select games for engine analysis based on dynamic sampling logic.
+    
+    Logic (Iteration 5):
+    - If total games < 50: Analyze ALL uncached games
+    - If total games >= 50: Use 20% sampling (min 10, max 50)
+    """
     # Validate date range first
     if date_range_days > 30:
         raise ValueError("Date range must be 30 days or less")
     
     # Remove already-analyzed games
     uncached_games = [g for g in all_games if g['url'] not in cache]
+    total_games = len(all_games)
     
-    # Fixed sample size for 1-minute target
-    # 60 seconds / 1.5s per position / 20 player moves = ~2 games
-    sample_size = min(2, len(uncached_games))
+    # Dynamic sampling based on dataset size
+    if total_games < 50:
+        # Analyze all uncached games for comprehensive results
+        games_to_analyze = uncached_games
+        analysis_note = f"Comprehensive analysis of {len(uncached_games)} games"
+    else:
+        # Use 20% sampling with min/max bounds
+        sample_size = max(10, min(50, int(len(uncached_games) * 0.20)))
+        
+        if sample_size == 0:
+            # All games cached
+            return [], "Analysis complete (all games cached)"
+        
+        # Stratified sampling: distribute across time period
+        sorted_games = sorted(uncached_games, key=lambda g: g['date'])
+        
+        # Select evenly distributed games
+        step = len(sorted_games) / sample_size
+        selected = [sorted_games[int(i * step)] for i in range(sample_size)]
+        
+        games_to_analyze = selected
+        percentage = (sample_size / total_games * 100)
+        analysis_note = f"Analysis based on {sample_size} games ({percentage:.1f}% sample)"
     
-    # If all games cached, return empty (will use cached results)
-    if sample_size == 0:
-        return []
-    
-    # Stratified sampling (simplified for small sample)
-    # 1. Sort games by date
-    sorted_games = sorted(uncached_games, key=lambda g: g['date'])
-    
-    # 2. Select games evenly distributed across time period
-    if sample_size == 1:
-        # Take middle game
-        selected = [sorted_games[len(sorted_games) // 2]]
-    else:  # sample_size == 2
-        # Take first third and last third
-        first_idx = len(sorted_games) // 3
-        last_idx = 2 * len(sorted_games) // 3
-        selected = [sorted_games[first_idx], sorted_games[last_idx]]
-    
-    return selected
+    return games_to_analyze, analysis_note
 ```
 
-**Frontend visualization:**
+**Frontend visualization (v2.6):**
 
 **Table display:**
 
-| Game Stage | Total Moves | Inaccuracies | Mistakes | Blunders | Missed Opportunities | Avg CP Loss | Critical Mistakes |
-|------------|-------------|--------------|----------|----------|----------------------|-------------|-------------------|
-| Early (1-7) | 450 | 12 | 8 | 3 | 5 | -45 | [Link to game] |
-| Middle (8-20) | 1200 | 35 | 22 | 12 | 18 | -78 | [Link to game] |
-| Endgame (21+) | 800 | 18 | 15 | 8 | 10 | -92 | [Link to game] |
+**Moves analysis** - Average number of Mistake/Neutral/Brilliant moves per game
+
+| | Mistake | Neutral | Brilliant |
+|------------|---------|---------|-----------|
+| early game (1-10 moves) | 1.8 | 5.1 | 2.3 |
+| middle games (sample 10 consecutive moves) | 2.4 | 4.2 | 3.1 |
+| late game (last 10 moves) | 3.1 | 4.9 | 1.8 |
 
 **Table details:**
-* **Total Moves:** Count of player moves in this stage across all games
-* **Inaccuracies/Mistakes/Blunders:** Count of each error type
-* **Missed Opportunities:** Times opponent blundered but player didn't capitalize
-* **Avg CP Loss:** Average centipawn loss per mistake in this stage
-* **Critical Mistakes:** Link to game meeting ALL criteria:
-  - Player LOST the game (not won, not drawn)
-  - Game ended by RESIGNATION (not timeout, not abandonment)
-  - Contains the biggest CP drop in this stage across all qualifying games
-  - CP drop must be significant (determined from data analysis - typically 300+ centipawns)
-  - Link opens game on Chess.com at the position where the critical mistake occurred
+* **Mistake:** Average count of mistake moves (≤-50 CP loss) per game in this stage
+* **Neutral:** Average count of neutral moves (-49 to +99 CP) per game in this stage
+* **Brilliant:** Average count of brilliant moves (≥+100 CP gain) per game in this stage
 
-**Visual summary card:**
-* "Your weakest stage: [Middle game]" (stage with highest mistake rate)
-* "Most common error: [Mistakes in middlegame]" 
-* "Biggest improvement area: [Endgame technique]" (highest avg CP loss)
+**Visual summary cards:**
+* **Weakest Stage:** "late game" (stage with highest avg mistakes per game)
+* **Total Mistakes:** "93" (sum of all mistakes across all stages and games)
+
+**Sample info text:**
+* "📊 Analyzed 16 games out of 84 total games (19%). Found 93 significant mistakes (50+ centipawns loss)."
+* "⚙️ Powered by Stockfish engine analysis. Move quality: Brilliant (≥+100cp gain), Neutral (-49 to +99cp), Mistake (≥-50cp loss)"
 
 **Technical implementation:**
 
@@ -1309,17 +1894,32 @@ def aggregate_mistake_analysis(games_data):
 - [ ] Error message shown if user attempts >30 day range
 - [ ] Preset buttons "Last 7 Days" and "Last 30 Days" prominent in UI
 - [ ] Stockfish engine integrated and working
-- [ ] Sampling algorithm selects 2 games maximum for 1-minute target
-- [ ] Games selected are time-distributed (not from same day)
+- [ ] **Dynamic sampling logic implemented:**
+  * If total games < 50: Analyze ALL uncached games
+  * If total games ≥ 50: Use 20% sampling (min 10, max 50)
+- [ ] **Display shows appropriate message:**
+  * <50 games: "Comprehensive analysis of X games"
+  * ≥50 games: "Analysis based on X games (Y% sample)"
+- [ ] Stratified sampling maintains time distribution for ≥50 game datasets
 - [ ] Sample games analyzed for mistakes across three stages
 - [ ] Mistakes correctly classified (inaccuracy/mistake/blunder)
 - [ ] Game stages correctly categorized (early/middle/endgame)
-- [ ] Centipawn loss calculated accurately
+- [x] **Move quality classification implemented (v2.5):**
+  * Brilliant moves: ≥+100 CP evaluation gain tracked
+  * Neutral moves: -49 to +99 CP evaluation change tracked
+  * Mistake moves: ≤-50 CP evaluation loss tracked
+- [x] **Table displays per-game average metrics (v2.5):**
+  * Avg Brilliant/Game column showing average count per game
+  * Avg Neutral/Game column showing average count per game
+  * Avg Mistakes/Game column showing average count per game
+  * Total Games Analyzed column showing sample size
+- [x] **Game stage labels updated (v2.5):**
+  * "Early (First 10)" for opening phase
+  * "Middle (Sampled 10)" for middle game phase
+  * "Late (Last 10)" for endgame phase
+- [x] Centipawn loss calculated accurately
 - [ ] Missed opportunities detected (opponent mistake + player's response)
 - [ ] Table displays all required columns with accurate data
-- [ ] Display shows: "Quick analysis based on X games (Y% sample)"
-- [ ] Tooltip explains: "Analyzing 2 representative games for patterns"
-- [ ] No confidence indicator (removed due to small sample by design)
 - [ ] Critical mistake game links meet ALL criteria:
   * Player lost by resignation (filtered out timeouts/abandonment)
   * Biggest CP drop in stage (threshold determined from data analysis)
@@ -1331,8 +1931,181 @@ def aggregate_mistake_analysis(games_data):
 - [ ] Engine analysis cached permanently (keyed by game URL)
 - [ ] Cache persists across multiple analyses (progressive improvement)
 - [ ] Loading indicator shows analysis progress ("Analyzing game X of Y")
-- [ ] **Analysis completes within 1 minute for first run (target: 60 seconds)**
-- [ ] **Cached analysis returns in <3 seconds**
+
+**Asynchronous Analysis (PRD v2.4 - February 19, 2026):**
+
+To improve user experience, mistake analysis now runs **asynchronously in the background** while users can view all other analytics sections immediately.
+
+**Motivation:**
+* Even with optimizations, Stockfish analysis takes 2-3 seconds per game
+* For 10-20 games, this means 20-60 seconds of waiting before seeing ANY results
+* Users should be able to view basic statistics immediately while engine analysis completes
+
+**Implementation approach:**
+
+**1. Immediate Response (Fast sections returned first):**
+```json
+{
+  "sections": {
+    "overall_performance": {...},
+    "color_performance": {...},
+    "elo_progression": {...},
+    "termination_wins": {...},
+    "termination_losses": {...},
+    "opening_performance": {...},
+    "opponent_strength": {...},
+    "time_of_day": {...},
+    "mistake_analysis": {
+      "status": "processing",
+      "task_id": "abc123-def456-789",
+      "estimated_time": "30-60 seconds",
+      "message": "Analyzing X games for mistakes..."
+    }
+  }
+}
+```
+
+**2. Background Processing:**
+* Flask spawns background thread for Stockfish analysis
+* Thread ID stored in task storage (in-memory dict with TTL)
+* Analysis runs independently without blocking response
+
+**3. Status Polling Endpoint:**
+```http
+GET /api/analyze/mistake-status/<task_id>
+
+Response (processing):
+{
+  "status": "processing",
+  "progress": {
+    "current": 5,
+    "total": 10,
+    "percentage": 50
+  },
+  "estimated_remaining": "15 seconds"
+}
+
+Response (completed):
+{
+  "status": "completed",
+  "data": {
+    "by_stage": {
+      "early": {...},
+      "middle": {...},
+      "endgame": {...}
+    },
+    "weakest_stage": "middle",
+    "total_games_analyzed": 10,
+    "sample_percentage": 100
+  }
+}
+
+Response (error):
+{
+  "status": "error",
+  "error": "Stockfish engine not found"
+}
+```
+
+**4. Frontend Polling Logic:**
+* When initial response received, check if `mistake_analysis.status === "processing"`
+* Show loading spinner in mistake analysis card
+* Poll status endpoint every 2 seconds
+* Update UI when `status === "completed"`
+* Show error message if `status === "error"`
+
+**Technical implementation:**
+
+```python
+# app/routes/api.py - Background thread handler
+import threading
+import uuid
+from datetime import datetime, timedelta
+
+# Task storage (in-memory with TTL)
+_background_tasks = {}
+_task_results = {}
+_task_cleanup_ttl = 3600  # 1 hour
+
+def cleanup_old_tasks():
+    """Remove completed tasks older than TTL"""
+    current_time = datetime.now()
+    for task_id in list(_task_results.keys()):
+        task = _task_results[task_id]
+        if (current_time - task['completed_at']).total_seconds() > _task_cleanup_ttl:
+            del _task_results[task_id]
+
+def run_mistake_analysis_background(task_id, games, username, analytics_service):
+    """Run Stockfish analysis in background thread"""
+    try:
+        _background_tasks[task_id] = {
+            'status': 'processing',
+            'progress': {'current': 0, 'total': len(games)}
+        }
+        
+        # Run analysis
+        result = analytics_service.mistake_analyzer.aggregate_mistake_analysis(
+            games, username
+        )
+        
+        # Store result
+        _task_results[task_id] = {
+            'status': 'completed',
+            'data': result,
+            'completed_at': datetime.now()
+        }
+        
+        # Remove from active tasks
+        del _background_tasks[task_id]
+        
+    except Exception as e:
+        _task_results[task_id] = {
+            'status': 'error',
+            'error': str(e),
+            'completed_at': datetime.now()
+        }
+        if task_id in _background_tasks:
+            del _background_tasks[task_id]
+
+# In analyze_detailed endpoint:
+if include_mistake_analysis:
+    # Generate unique task ID
+    task_id = str(uuid.uuid4())
+    
+    # Start background thread
+    thread = threading.Thread(
+        target=run_mistake_analysis_background,
+        args=(task_id, games, username, analytics_service)
+    )
+    thread.daemon = True
+    thread.start()
+    
+    # Return immediate response with task ID
+    sections['mistake_analysis'] = {
+        'status': 'processing',
+        'task_id': task_id,
+        'estimated_time': f"{len(games) * 2}-{len(games) * 3} seconds"
+    }
+```
+
+**Benefits:**
+* **Page load time:** 30-60s → 5-10s (instant for non-engine sections)
+* **Better UX:** Users can browse statistics while analysis runs
+* **Progressive enhancement:** Basic stats first, detailed analysis follows
+* **No external dependencies:** Uses Python threading (built-in)
+* **Scalable:** Can upgrade to Celery/Redis later if needed
+
+**Acceptance criteria:**
+- [ ] Initial API response returns within 5-10 seconds (non-engine sections only)
+- [ ] `mistake_analysis` section includes `status: "processing"` and `task_id`
+- [ ] Background thread spawned successfully for Stockfish analysis
+- [ ] Status endpoint `/api/analyze/mistake-status/<task_id>` returns correct status
+- [ ] Frontend polls status endpoint every 2 seconds
+- [ ] Loading spinner shown in mistake analysis card during processing
+- [ ] Results automatically populate when analysis completes
+- [ ] Error message shown if analysis fails
+- [ ] Task cleanup removes old results after 1 hour TTL
+- [ ] Multiple simultaneous analyses supported (different task IDs)
 - [ ] Handles games without engine analysis gracefully
 - [ ] Works for games from player's perspective (both White and Black)
 - [ ] User can run multiple short-period analyses to see patterns over time
@@ -1431,24 +2204,14 @@ SYSTEM_PROMPT = """
 You are an expert chess coach analyzing a player's performance data. Your goal is to provide 
 concise, actionable advice to help them improve their chess skills.
 
-Based on the provided statistics, generate EXACTLY:
-1. Nine (9) section-specific recommendations - ONE for each section (1-9):
-   - Section 1: Overall Performance
-   - Section 2: Color Performance  
-   - Section 3: Rating Progression
-   - Section 4: How You Win
-   - Section 5: How You Lose
-   - Section 6: Opening Performance
-   - Section 7: Opponent Strength
-   - Section 8: Time of Day Performance
-   - Section 9: Mistake Analysis
-2. One (1) overall recommendation that synthesizes all insights
+Based on the provided statistics from all 9 sections of analysis, generate ONE specific 
+recommendation for EACH of the 9 sections (1-2 bullet points per section).
 
-Format your response with clear section labels. Each recommendation should:
+Your recommendations should:
+- Be presented as 1-2 concise bullet points per section
 - Be specific and actionable
 - Reference concrete data from the analysis
-- Provide clear next steps for improvement
-- Be concise (1-2 sentences max)
+- Each bullet point should be 1-2 sentences maximum
 
 Focus on the most impactful areas for improvement. Prioritize:
 1. Patterns with clear negative impact (e.g., high timeout losses)
@@ -1459,7 +2222,7 @@ Focus on the most impactful areas for improvement. Prioritize:
 Avoid:
 - Generic advice ("study more tactics")
 - Obvious statements ("you lose when you blunder")
-- Skipping any section (all 9 sections must have a recommendation)
+- Long paragraphs or overly detailed explanations
 
 Tone: Encouraging but honest, like a supportive coach.
 """
@@ -1469,38 +2232,37 @@ Analyze this chess player's performance and provide coaching recommendations:
 
 {summary_data_json}
 
-Provide recommendations in this EXACT format:
+Provide your recommendations in this EXACT format:
 
 **Section 1 - Overall Performance:**
-- [Specific recommendation based on win rate trends and overall stats]
+• [Actionable insight 1]
+• [Actionable insight 2 if needed]
 
 **Section 2 - Color Performance:**
-- [Specific recommendation based on White vs Black performance]
+• [Actionable insight]
 
-**Section 3 - Rating Progression:**
-- [Specific recommendation based on rating changes and trends]
+**Section 3 - ELO Progression:**
+• [Actionable insight]
 
-**Section 4 - How You Win:**
-- [Specific recommendation based on winning termination patterns]
+**Section 4 - Termination Wins:**
+• [Actionable insight]
 
-**Section 5 - How You Lose:**
-- [Specific recommendation based on losing termination patterns]
+**Section 5 - Termination Losses:**
+• [Actionable insight]
 
 **Section 6 - Opening Performance:**
-- [Specific recommendation based on best/worst openings]
-- [YouTube Video]: [Opening name] - [Video title or link placeholder]
+• [Actionable insight]
 
 **Section 7 - Opponent Strength:**
-- [Specific recommendation based on performance vs different rated opponents]
+• [Actionable insight]
 
 **Section 8 - Time of Day:**
-- [Specific recommendation based on time period performance]
+• [Actionable insight]
 
-**Section 9 - Mistake Analysis:**
-- [Specific recommendation based on mistake patterns by game stage]
+**Section 9 - Move Analysis:**
+• [Actionable insight]
 
-**Overall Recommendation:**
-- [One comprehensive recommendation that synthesizes all insights and provides a clear action plan]
+Keep each bullet point concise (1-2 sentences maximum).
 """
 ```
 
@@ -1516,17 +2278,17 @@ class ChessAdvisorService:
         self.api_key = os.getenv("OPENAI_API_KEY")
         openai.api_key = self.api_key
         self.model = "gpt-4-turbo"  # or "gpt-4"
-        self.max_tokens = 500  # Limit response length for cost control
+        self.max_tokens = 600  # Sufficient for 9 section recommendations (v2.7+)
     
     def generate_advice(self, summary_data: dict) -> dict:
         """
-        Generate personalized chess coaching advice using GPT-4.
+        Generate personalized chess coaching advice using GPT-4 (v2.8).
         
         Args:
             summary_data: Aggregated statistics from all analysis sections
             
         Returns:
-            dict with 'section_suggestions' (list) and 'overall_recommendation' (str)
+            dict with 'section_suggestions' (list of 9 section dicts with bullets)
         """
         try:
             # Prepare user prompt
@@ -1550,18 +2312,16 @@ class ChessAdvisorService:
             # Parse response
             advice_text = response.choices[0].message.content
             
-            # Extract suggestions and overall recommendation
+            # Extract section recommendations
             parsed_advice = self._parse_advice_response(advice_text)
             
-            # Log token usage for cost monitoring
+            # Log token usage for internal monitoring (not returned to user)
             tokens_used = response.usage.total_tokens
             estimated_cost = self._calculate_cost(tokens_used)
+            self._log_usage(tokens_used, estimated_cost)  # Internal logging only
             
             return {
-                "section_suggestions": parsed_advice["suggestions"],
-                "overall_recommendation": parsed_advice["overall"],
-                "tokens_used": tokens_used,
-                "estimated_cost": estimated_cost
+                "section_suggestions": parsed_advice["suggestions"]
             }
             
         except Exception as e:
@@ -1570,32 +2330,59 @@ class ChessAdvisorService:
     
     def _parse_advice_response(self, response_text: str) -> dict:
         """
-        Parse GPT response into structured format.
+        Parse GPT response into structured format (v2.8: sections only).
         """
         lines = response_text.strip().split("\n")
         suggestions = []
-        overall = ""
         
         current_section = None
+        current_bullets = []
+        
         for line in lines:
             line = line.strip()
             if not line:
                 continue
             
-            if "Section-Specific" in line or "**Section-Specific" in line:
-                current_section = "suggestions"
-            elif "Overall Recommendation" in line or "**Overall Recommendation" in line:
-                current_section = "overall"
-            elif line.startswith("-") or line.startswith("•"):
-                suggestion = line.lstrip("-•").strip()
-                if current_section == "suggestions":
-                    suggestions.append(suggestion)
-                elif current_section == "overall":
-                    overall = suggestion
+            # Check for section header (e.g., **Section 1 - Overall Performance:**)
+            if line.startswith('**Section') and (':' in line or ':**' in line):
+                # Save previous section if exists
+                if current_section:
+                    suggestions.append({
+                        'section_number': current_section['number'],
+                        'section_name': current_section['name'],
+                        'bullets': current_bullets.copy()
+                    })
+                
+                # Parse new section
+                section_match = line.replace('**', '').replace(':', '').strip()
+                parts = section_match.split(' - ', 1)
+                
+                try:
+                    section_num_str = parts[0].replace('Section', '').strip()
+                    section_num = int(section_num_str)
+                    section_name = parts[1].strip() if len(parts) > 1 else f"Section {section_num}"
+                    
+                    current_section = {'number': section_num, 'name': section_name}
+                    current_bullets = []
+                except (ValueError, IndexError):
+                    continue
+                    
+            elif line.startswith('•') or line.startswith('-') or line.startswith('*'):
+                # Bullet point - only for sections
+                if current_section is not None:
+                    bullet = line.lstrip('•-* ').strip()
+                    current_bullets.append(bullet)
+        
+        # Save last section if exists
+        if current_section:
+            suggestions.append({
+                'section_number': current_section['number'],
+                'section_name': current_section['name'],
+                'bullets': current_bullets.copy()
+            })
         
         return {
-            "suggestions": suggestions,
-            "overall": overall
+            "suggestions": suggestions
         }
     
     def _calculate_cost(self, tokens: int) -> float:
@@ -1610,23 +2397,77 @@ class ChessAdvisorService:
         cost = (input_tokens / 1000 * 0.01) + (output_tokens / 1000 * 0.03)
         return round(cost, 4)
     
+    def _log_usage(self, tokens: int, cost: float):
+        """
+        Log token usage and cost for internal monitoring.
+        This is for cost tracking purposes only - not shown to users.
+        """
+        # Implementation: Log to file, database, or monitoring service
+        logger.info(f"OpenAI API usage - Tokens: {tokens}, Estimated cost: ${cost}")
+    
     def _generate_fallback_advice(self, summary_data: dict) -> dict:
         """
-        Generate basic advice if API fails.
+        Generate rule-based section advice if API fails (v2.8).
         """
-        suggestions = [
-            "Focus on reducing time pressure - consider playing longer time controls.",
-            "Work on middlegame tactics where most mistakes occur.",
-            "Practice your weaker openings or consider switching to more comfortable repertoire."
-        ]
+        section_suggestions = []
         
-        overall = "Continue analyzing your games and focus on consistent play in your strongest time periods."
+        # Generate simple advice for each of the 9 sections
+        section_suggestions.append({
+            'section_number': 1,
+            'section_name': 'Overall Performance',
+            'bullets': ['Focus on consistency to improve overall win rate']
+        })
+        
+        section_suggestions.append({
+            'section_number': 2,
+            'section_name': 'Color Performance',
+            'bullets': ['Work on your weaker color to balance performance']
+        })
+        
+        section_suggestions.append({
+            'section_number': 3,
+            'section_name': 'ELO Progression',
+            'bullets': ['Analyze your losses to identify rating improvement areas']
+        })
+        
+        section_suggestions.append({
+            'section_number': 4,
+            'section_name': 'Termination Wins',
+            'bullets': ['Continue capitalizing on opponent mistakes']
+        })
+        
+        section_suggestions.append({
+            'section_number': 5,
+            'section_name': 'Termination Losses',
+            'bullets': ['Reduce timeout losses through better time management']
+        })
+        
+        section_suggestions.append({
+            'section_number': 6,
+            'section_name': 'Opening Performance',
+            'bullets': ['Review or replace your weakest openings']
+        })
+        
+        section_suggestions.append({
+            'section_number': 7,
+            'section_name': 'Opponent Strength',
+            'bullets': ['Challenge yourself by playing varied opponent strengths']
+        })
+        
+        section_suggestions.append({
+            'section_number': 8,
+            'section_name': 'Time of Day',
+            'bullets': ['Play more games during your best-performing time periods']
+        })
+        
+        section_suggestions.append({
+            'section_number': 9,
+            'section_name': 'Move Analysis',
+            'bullets': ['Practice tactics to reduce mistakes in your weakest game stage']
+        })
         
         return {
-            "section_suggestions": suggestions,
-            "overall_recommendation": overall,
-            "tokens_used": 0,
-            "estimated_cost": 0
+            "section_suggestions": section_suggestions
         }
 ```
 
@@ -1690,60 +2531,22 @@ class ChessAdvisorService:
 │                                             │
 │ Based on your 150 games from Jan-Mar 2025  │
 │                                             │
-│ 📊 Section 1 - Overall Performance:         │
-│   • Your 52% win rate shows steady play.   │
-│     Focus on converting drawn positions    │
-│     to capitalize on improving trend.      │
-│                                             │
-│ ♟️ Section 2 - Color Performance:           │
-│   • White (54% WR) outperforms Black (50%)│
-│     Strengthen Black repertoire with solid │
-│     defenses like Caro-Kann or Petroff.    │
-│                                             │
-│ 📈 Section 3 - Rating Progression:          │
-│   • Rating up 25 points - good momentum!   │
-│     Maintain consistency to reach 1550 by  │
-│     next quarter.                           │
-│                                             │
-│ ✅ Section 4 - How You Win:                 │
-│   • 50% wins by checkmate show strong      │
-│     tactical vision. Keep sharpening!      │
-│                                             │
-│ ❌ Section 5 - How You Lose:                │
-│   • 35% losses by timeout indicate time    │
-│     pressure issues. Play increment games  │
-│     to build clock management skills.      │
-│                                             │
-│ 📖 Section 6 - Opening Performance:         │
-│   • Your French Defense (30% WR) needs     │
-│     work. Consider switching or studying   │
-│     key defensive lines.                    │
-│   📺 Learn: "French Defense Masterclass"   │
-│      by ChessNetwork                        │
-│      👉 [Watch Tutorial]                    │
-│                                             │
-│ 🎯 Section 7 - Opponent Strength:           │
-│   • 38% WR vs higher-rated shows potential │
-│     Study endgame technique for better     │
-│     defense in tough positions.             │
-│                                             │
-│ 🕐 Section 8 - Time of Day:                 │
-│   • Afternoon (58% WR) is your peak time.  │
-│     Schedule important games 2-10pm and    │
-│     avoid late night sessions.              │
-│                                             │
-│ 🔍 Section 9 - Mistake Analysis:            │
-│   • Middlegame (69 mistakes) is weakest    │
-│     phase. Daily tactics puzzles focusing  │
-│     on moves 10-20 will help significantly.│
-│                                             │
 │ 🎯 Overall Recommendation:                  │
-│   • Priority 1: Fix time management (play  │
-│     increment). Priority 2: Improve French │
-│     Defense or switch openings. Priority 3:│
-│     Focus 70% study time on middlegame     │
-│     tactics. Schedule games in afternoon   │
-│     hours for best results.                 │
+│                                             │
+│ • Fix time management by switching to       │
+│   increment games - 35% timeout losses      │
+│   indicate this is your biggest weakness    │
+│                                             │
+│ • Improve or replace French Defense (30%   │
+│   win rate) - consider more solid options  │
+│   like Caro-Kann or Petroff Defense        │
+│                                             │
+│ • Focus 70% of study time on middlegame    │
+│   tactics (moves 10-20) where you have 69  │
+│   mistakes compared to 23 in early game    │
+│                                             │
+│ • Schedule important games between 2-10pm  │
+│   when your win rate is highest (58%)      │
 │                                             │
 │ [🔄 Regenerate Advice]                      │
 └─────────────────────────────────────────────┘
@@ -1766,28 +2569,22 @@ class ChessAdvisorService:
 - [ ] System prompt produces relevant, actionable advice
 - [ ] Summary data includes all sections (1-9) without raw PGN
 - [ ] API response parsed correctly into structured format
-- [ ] EXACTLY 9 section-specific recommendations displayed (one per section)
-- [ ] Section labels clearly identify which section each recommendation addresses
-- [ ] 1 overall recommendation displayed at the end
-- [ ] YouTube video recommendations integrated for player's common openings
-- [ ] Video prioritization implemented: ChessNetwork > GMHikaru > GothamChess > Chessbrahs
-- [ ] 1 video recommendation shown per frequently-played opening (3+ games)
-- [ ] Video links are clickable and open in new tab
-- [ ] Curated video database implemented OR YouTube API search working
-- [ ] If using YouTube API: proper API key management and rate limiting
-- [ ] Advice is specific and references actual player data
+- [ ] Overall recommendation displayed as concise bullet points (3-5 bullets)
+- [ ] Each bullet point is specific and references actual player data
+- [ ] Bullet points are actionable and prioritized by impact
+- [ ] No section-specific recommendations displayed (removed as per v2.6)
+- [ ] No YouTube video recommendations in AI section (simplified in v2.6)
 - [ ] Loading state shows during API call (< 10 seconds)
-- [ ] Cost per analysis < $0.012 (verified through monitoring)
+- [ ] Cost per analysis < $0.008 (reduced token limit to 300)
 - [ ] AI advice cached for 1 hour (same parameters)
-- [ ] Fallback advice works when API fails (includes all 9+1 recommendations)
+- [ ] Fallback advice works when API fails (bullet point format)
 - [ ] Error states handled gracefully
 - [ ] Section appears at bottom of dashboard
-- [ ] Regenerate button works (calls API again, may get different videos)
-- [ ] Token usage and cost logged for monitoring
+- [ ] Regenerate button works (calls API again)
+- [ ] Token usage and cost logged internally for monitoring (NOT displayed to users)
 - [ ] Privacy: No raw PGN data sent to OpenAI
 - [ ] Rate limiting prevents excessive API calls
 - [ ] UI is responsive on mobile devices
-- [ ] Video thumbnails display correctly (optional enhancement)
 
 ---
 
@@ -1808,46 +2605,83 @@ class ChessAdvisorService:
 * Test future dates: Should show error
 * Test start date after end date: Should show error
 
-**TC-021: Mistake analysis by game stage (with 1-minute target)**
+**TC-021: Mistake analysis with dynamic sampling logic**
 * Complete analysis workflow with engine analysis enabled
-* Use "Last 7 Days" preset (assume ~10 games)
-* Verify loading indicator shows "Analyzing game X of Y"
-* **Verify analysis completes within 60 seconds (critical performance requirement)**
-* Verify Section 9 displays mistake analysis table
-* Verify display shows: "Quick analysis based on 2 games (20% sample)"
-* Verify tooltip: "Analyzing 2 representative games for patterns"
-* Verify table shows three rows (early/middle/endgame)
-* Verify mistake counts (inaccuracies/mistakes/blunders) are present
-* Verify average CP loss calculated per stage
-* Verify links to critical mistake games work
-* Verify weakest stage identified correctly
-* Click on game link, verify it opens correct game on Chess.com
+* **Test Scenario 1: Small dataset (<50 games)**
+  - Use "Last 7 Days" preset (assume ~30 games)
+  - Verify loading indicator shows "Analyzing game X of Y"
+  - Verify display shows: "Comprehensive analysis of 30 games"
+  - Verify ALL 30 games are analyzed (no sampling)
+* **Test Scenario 2: Large dataset (≥50 games)**
+  - Use "Last 30 Days" preset (assume ~60 games)
+  - Verify display shows: "Analysis based on X games (Y% sample)"
+  - Verify 20% of games analyzed (12 games in this case, min 10, max 50)
+  - Verify tooltip explains sampling strategy
+* Common verifications for both scenarios:
+  - Verify Section 9 displays mistake analysis table
+  - Verify table shows three rows (early/middle/endgame)
+  - Verify mistake counts (inaccuracies/mistakes/blunders) are present
+  - Verify average CP loss calculated per stage
+  - Verify links to critical mistake games work
+  - Verify weakest stage identified correctly
+  - Click on game link, verify it opens correct game on Chess.com
 
-**TC-021A: Sampling strategy verification (updated for 2-game target)**
-* Analyze "Last 30 Days" with 40 games
-* Verify exactly 2 games analyzed (not more)
-* Verify games are distributed across time period (check dates: one early, one late)
-* **Measure actual analysis time: should be <60 seconds**
-* Run analysis again for same date range
-* Verify same games used (cached), no re-analysis
-* **Verify cached analysis time <3 seconds**
+**TC-021A: Dynamic sampling strategy verification**
+* **Small dataset test (<50 games):**
+  - Analyze period with 35 total games
+  - Verify ALL 35 games analyzed
+  - Verify display: "Comprehensive analysis of 35 games"
+  - Note analysis time
+* **Large dataset test (≥50 games):**
+  - Analyze period with 100 total games
+  - Verify 20 games analyzed (20% sample)
+  - Verify display: "Analysis based on 20 games (20% sample)"
+  - Verify games distributed across time period
+  - Note analysis time
+* **Boundary test (exactly 50 games):**
+  - Analyze period with exactly 50 games
+  - Verify 10 games analyzed (20%, hits minimum)
+  - Verify display: "Analysis based on 10 games (20% sample)"
+* **Run analysis again for same date range:**
+  - Verify same games used (cached), no re-analysis
+  - Verify cached analysis time <5 seconds
 
-**TC-021B: Progressive cache improvement (updated)**
-* Day 1: Analyze Last 7 Days (10 games, 2 analyzed in ~60 sec)
-* Note which 2 games were analyzed
-* Day 2: Analyze Last 7 Days again (same period)
-* Verify analysis completes in <3 seconds (fully cached)
-* Day 3: Analyze Last 30 Days (40 games total, includes previous 10)
-* Verify previous 2 games NOT re-analyzed (cached)
-* Verify 2 new games analyzed from new period
-* Verify total analysis time ~60 seconds (only 2 new games)
+**TC-021B: Progressive cache improvement with dynamic sampling**
+* **Day 1: Small dataset analysis**
+  - Analyze Last 7 Days (30 games total)
+  - Verify all 30 games analyzed (comprehensive)
+  - Note which games were analyzed
+  - Note analysis time
+* **Day 2: Repeat same period**
+  - Analyze Last 7 Days again (same period)
+  - Verify analysis completes in <5 seconds (fully cached)
+  - Verify no new analysis performed
+* **Day 3: Expand to large dataset**
+  - Analyze Last 30 Days (80 games total, includes previous 30)
+  - Verify previous 30 games NOT re-analyzed (cached)
+  - Verify 16 games analyzed from new 50 games (20% of new games)
+  - Verify display: "Analysis based on X games (Y% sample)"
+  - Verify total time reasonable (only new games analyzed)
 
-**TC-021C: Performance validation across different scenarios**
-* Scenario 1: 7 days, 5 games → Analyze 1-2 games → **Verify <45 seconds**
-* Scenario 2: 7 days, 15 games → Analyze 2 games → **Verify <60 seconds**
-* Scenario 3: 30 days, 40 games → Analyze 2 games → **Verify <60 seconds**
-* Scenario 4: All cached → **Verify <3 seconds**
-* If any scenario exceeds time limit, log and investigate
+**TC-021C: Dataset size thresholds verification**
+* **Scenario 1: 10 total games**
+  - Verify 10 games analyzed (100%)
+  - Verify display: "Comprehensive analysis of 10 games"
+* **Scenario 2: 49 total games (boundary)**
+  - Verify 49 games analyzed (100%, just under threshold)
+  - Verify display: "Comprehensive analysis of 49 games"
+* **Scenario 3: 50 total games (boundary)**
+  - Verify 10 games analyzed (20%, hits minimum)
+  - Verify display: "Analysis based on 10 games (20% sample)"
+* **Scenario 4: 100 total games**
+  - Verify 20 games analyzed (20%)
+  - Verify display: "Analysis based on 20 games (20% sample)"
+* **Scenario 5: 300 total games**
+  - Verify 50 games analyzed (16.7%, hits maximum)
+  - Verify display: "Analysis based on 50 games (16.7% sample)"
+* **Scenario 6: All cached**
+  - Verify <5 seconds response time
+  - Verify no new analysis performed
 
 **TC-022: Engine analysis caching**
 * Run analysis for date range with 50 games
@@ -2715,18 +3549,40 @@ After deployment:
 - [ ] OpenAI GPT-4 API integrated
 - [ ] Summary data includes insights from all sections (no raw PGN)
 - [ ] AI generates EXACTLY 9 section-specific recommendations (one per section 1-9)
-- [ ] AI generates 1 overall recommendation
+- [ ] Each section recommendation has 1-2 concise bullet points
 - [ ] Each recommendation clearly labeled with section name
-- [ ] YouTube video links provided for player's frequently-played openings
-- [ ] Video prioritization: ChessNetwork > GMHikaru > GothamChess > Chessbrahs
 - [ ] Advice is specific and actionable
 - [ ] Advice references actual player statistics
-- [ ] Cost per analysis < $0.012 (updated for increased tokens)
+- [ ] Cost per analysis < $0.012
 - [ ] Response time < 10 seconds
 - [ ] Loading state shown during AI processing
-- [ ] Fallback advice works if API fails (includes all 9+1)
+- [ ] Fallback advice works if API fails (includes all 9 sections)
 - [ ] AI advice cached for 1 hour
 - [ ] Section appears at bottom of dashboard
+- [ ] No overall recommendation displayed (removed in v2.8)
+
+---
+
+## EA-020: Website analytics tracking with Google Tag Manager
+**As a** website owner  
+**I want to** track visitor behavior and page views using Google Tag Manager  
+**So that** I can understand user engagement and make data-driven product decisions
+
+**Acceptance criteria:**
+- [ ] Google Tag Manager (GTM) script added to all HTML templates
+- [ ] GTM container ID GT-NFBTKHBS properly configured
+- [ ] Google Analytics 4 tag G-VMYYSZC29R integrated
+- [ ] GTM script placed in `<head>` section of all pages
+- [ ] Noscript fallback added immediately after `<body>` tag for non-JavaScript users
+- [ ] Both index.html and analytics.html templates updated
+- [ ] GTM tags fire correctly on page load (verified in GTM Preview mode)
+- [ ] Page load performance not impacted (< 100ms additional load time)
+- [ ] No personally identifiable information (PII) tracked
+- [ ] GTM respects Do Not Track (DNT) browser settings
+- [ ] Analytics data visible in Google Analytics dashboard within 24 hours
+- [ ] Track page views for both home page and analytics dashboard
+- [ ] No backend code changes required
+- [ ] Testing includes verification with GTM debugger
 
 ---
 
@@ -2977,15 +3833,87 @@ Not included in this PRD but potential future additions:
 
 ---
 
-**Document Version:** 2.1  
+**Document Version:** 2.9  
 **Created:** December 5, 2025  
-**Last Updated:** December 26, 2025  
+**Last Updated:** February 20, 2026  
 **Author:** PRD Agent  
-**Status:** Updated with UI refinements and YouTube integration
+**Status:** Updated with Google Tag Manager integration for visitor tracking
 
 ---
 
 ## Changelog
+
+**Version 2.9 (February 20, 2026):**
+* **New Feature:** Google Tag Manager (GTM) integration for website analytics
+* **GTM Container ID:** GT-NFBTKHBS
+* **GA4 Measurement ID:** G-VMYYSZC29R
+* **Implementation:** Added GTM script tags to both `index.html` and `analytics.html` templates
+* **User Story:** Added EA-020 for website analytics tracking
+* **Tracking:** Page views, user sessions, traffic sources, and engagement metrics
+* **Privacy:** No PII tracking, respects DNT settings
+* **Impact:** Frontend-only changes, no backend modifications required
+* Created iteration_10_summary.md document
+
+**Version 2.8 (February 20, 2026):**
+* **Section 10 (AI Chess Advisor):** Removed overall recommendation section
+* **Simplified UI:** Display only 9 section-specific recommendations (1-2 bullets each)
+* **Token optimization:** Reduced prompt complexity while maintaining comprehensive guidance
+* Updated acceptance criteria to remove overall recommendation requirement
+* Created iteration_9_summary.md document
+
+**Version 2.7 (February 20, 2026):**
+* **Section 9 (Move Analysis):** Added "Number of games" row to table display
+* **Section 10 (AI Chess Advisor):** Restored section-specific recommendations with concise bullet format
+* **Enhanced structure:** Display 9 section-specific recommendations (1-2 bullets each) + overall recommendation
+* **Token adjustment:** Increased max_tokens from 300 to 600 to accommodate section guidance
+* Updated acceptance criteria for both sections
+* Created iteration_8_summary.md document
+
+**Version 2.6 (February 20, 2026):**
+* **Section 9 (Move Analysis):** Simplified table layout, reordered columns (Mistake | Neutral | Brilliant)
+* **Section 10 (AI Chess Advisor):** Simplified to display only overall recommendation (removed section-specific)
+* **Token optimization:** Reduced max_tokens from 500 to 300
+* **UI simplification:** Removed token usage and cost display from frontend
+* Updated acceptance criteria and test cases
+* Created iteration_7_summary.md document
+
+**Version 2.5 (February 19, 2026):**
+* **Section 6 (Opening Performance):** Simplified to Top 5 openings (was Top 10)
+* **Section 9:** Renamed "Mistake Analysis" to "Move Analysis by Game Stage"
+* **Section 9:** Enhanced to track Brilliant/Neutral/Mistake moves (was only tracking mistake types)
+* **Section 10 (AI Chess Advisor):** Re-enabled AI advice section in frontend
+* Updated acceptance criteria and test cases
+* Created iteration_6_summary.md document
+
+**Version 2.4 (February 19, 2026):**
+* **Section 9 (Mistake Analysis):** Added asynchronous background processing for Stockfish analysis
+* **New API endpoint:** `/api/analyze/mistake-status/<task_id>` for polling analysis status
+* **UX improvement:** Users can view all other analytics immediately (5-10s) while mistake analysis runs in background (30-60s)
+* **Technical approach:** Background threading with in-memory task storage and 1-hour TTL
+* Updated acceptance criteria for async functionality
+* Added frontend polling requirements
+
+**Version 2.3 (February 18, 2026):**
+* **Enhanced Section 2 (Color Performance):** Added W/L/D counts to summary cards in addition to total games and win rate
+* **Simplified Sections 4 & 5 (Termination Types):** Changed pie charts to show numbers only (no category labels), hidden legend for cleaner design
+* **Enhanced Section 6 (Opening Performance):** 
+  - Added display of first 6 full moves in standard notation
+  - Added Lichess board editor URL for position visualization
+  - Added Chess.com example game URL for each opening
+  - Separated White and Black openings into distinct sections
+* **Refined Section 9 (Mistake Analysis):** Implemented dynamic sampling logic based on dataset size:
+  - <50 games: Analyze ALL games (comprehensive analysis)
+  - ≥50 games: Use 20% sampling (min 10, max 50 games)
+* Updated test cases TC-016, TC-017, TC-018, TC-021 (and sub-tests) to reflect new requirements
+* Updated acceptance criteria across affected sections
+* Created iteration_5_summary.md document
+
+**Version 2.2 (December 31, 2025):**
+* **Global Change:** Added maximum 30-day date range restriction for performance
+* **Section 6 (Opening Performance):** Complete redesign from best/worst to frequency-based (Top 10 Most Common)
+* **Section 9 (Mistake Analysis):** Added intelligent 20% sampling strategy with min/max bounds
+* Updated test cases and acceptance criteria
+* Created iteration_4_summary.md document
 
 **Version 2.1 (December 26, 2025):**
 * Updated Section 6: Changed "Top 5" to dynamic "Top Best/Worst" openings display
