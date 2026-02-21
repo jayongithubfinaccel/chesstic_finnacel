@@ -26,18 +26,25 @@ class MistakeAnalysisService:
     MISTAKE_THRESHOLD = 100
     BLUNDER_THRESHOLD = 200
     
-    # PRD v2.2: Early stop threshold for obvious blunders (>500 CP)
-    EARLY_STOP_THRESHOLD = 500
+    # PRD v2.3: Optimized for speed (3-4x faster) with strategic move sampling
+    EARLY_STOP_THRESHOLD = 300  # Skip detailed analysis for blunders >300 CP
+    SKIP_EVAL_THRESHOLD = 600   # Skip analyzing heavily winning/losing positions
     
-    def __init__(self, stockfish_path: str = 'stockfish', engine_depth: int = 12, 
-                 time_limit: float = 1.5, enabled: bool = True):
+    # Strategic move sampling (February 18, 2026)
+    FIRST_MOVES_TO_ANALYZE = 10   # Always analyze first 10 moves (opening)
+    LAST_MOVES_TO_ANALYZE = 10    # Always analyze last 10 moves (endgame)
+    MIDDLE_MOVES_TO_ANALYZE = 10  # Sample 10 moves from middle game
+    MAX_MOVES_PER_GAME = 30       # Maximum moves to analyze per game
+    
+    def __init__(self, stockfish_path: str = 'stockfish', engine_depth: int = 10, 
+                 time_limit: float = 0.5, enabled: bool = True):
         """
         Initialize mistake analysis service.
         
         Args:
             stockfish_path: Path to Stockfish executable
-            engine_depth: Analysis depth (default: 12, optimized for speed in v2.2)
-            time_limit: Time limit per position in seconds (default: 1.5s in v2.2)
+            engine_depth: Analysis depth (default: 10, balanced for sampled moves in v2.3)
+            time_limit: Time limit per position in seconds (default: 0.5s in v2.3)
             enabled: Whether engine analysis is enabled
         """
         self.stockfish_path = stockfish_path
@@ -133,26 +140,74 @@ class MistakeAnalysisService:
         
         return None
     
+    def _select_moves_to_analyze(self, total_player_moves: int) -> set:
+        """
+        Select which move indices to analyze using strategic sampling.
+        PRD v2.3: First 10, last 10, middle 10 (max 30 total).
+        
+        Args:
+            total_player_moves: Total number of player moves in the game
+            
+        Returns:
+            Set of move indices (0-based) to analyze
+        """
+        moves_to_analyze = set()
+        
+        # If game has <= 30 moves, analyze all
+        if total_player_moves <= self.MAX_MOVES_PER_GAME:
+            return set(range(total_player_moves))
+        
+        # First 10 moves (opening)
+        first_moves = min(self.FIRST_MOVES_TO_ANALYZE, total_player_moves)
+        moves_to_analyze.update(range(first_moves))
+        
+        # Last 10 moves (endgame)
+        last_moves = min(self.LAST_MOVES_TO_ANALYZE, total_player_moves)
+        moves_to_analyze.update(range(total_player_moves - last_moves, total_player_moves))
+        
+        # Middle 10 moves (sample evenly from remaining positions)
+        # Exclude first 10 and last 10
+        middle_start = self.FIRST_MOVES_TO_ANALYZE
+        middle_end = total_player_moves - self.LAST_MOVES_TO_ANALYZE
+        middle_range = middle_end - middle_start
+        
+        if middle_range > 0:
+            # Sample evenly across middle game
+            moves_to_sample = min(self.MIDDLE_MOVES_TO_ANALYZE, middle_range)
+            if moves_to_sample > 0:
+                step = middle_range / moves_to_sample
+                for i in range(moves_to_sample):
+                    move_idx = middle_start + int(i * step)
+                    moves_to_analyze.add(move_idx)
+        
+        return moves_to_analyze
+    
     def analyze_game_mistakes(self, pgn_string: str, player_color: str) -> Dict:
         """
-        Analyze a single game for mistakes across all stages.
+        Analyze a single game for move quality across all stages.
+        PRD v2.5: Tracks brilliant/neutral/mistake moves (simplified classification).
+        PRD v2.3: Uses strategic move sampling (first 10, last 10, middle 10).
         
         Args:
             pgn_string: PGN string of the game
             player_color: 'white' or 'black' - which side to analyze
             
         Returns:
-            Dictionary with mistake analysis per stage
+            Dictionary with move quality analysis per stage
         """
         mistakes = {
             'early': {
                 'total_moves': 0,
-                'inaccuracies': 0,
-                'mistakes': 0,
-                'blunders': 0,
+                'inaccuracies': 0,  # Kept for backward compatibility
+                'mistakes': 0,  # Kept for backward compatibility
+                'blunders': 0,  # Kept for backward compatibility
                 'missed_opps': 0,
                 'cp_losses': [],
-                'worst_mistake': None
+                'worst_mistake': None,
+                # v2.5: New move quality tracking
+                'brilliant_moves': 0,  # ≥+100 CP gain
+                'neutral_moves': 0,  # -49 to +99 CP
+                'mistake_moves': 0  # ≤-50 CP loss
             },
             'middle': {
                 'total_moves': 0,
@@ -161,7 +216,10 @@ class MistakeAnalysisService:
                 'blunders': 0,
                 'missed_opps': 0,
                 'cp_losses': [],
-                'worst_mistake': None
+                'worst_mistake': None,
+                'brilliant_moves': 0,
+                'neutral_moves': 0,
+                'mistake_moves': 0
             },
             'endgame': {
                 'total_moves': 0,
@@ -170,7 +228,10 @@ class MistakeAnalysisService:
                 'blunders': 0,
                 'missed_opps': 0,
                 'cp_losses': [],
-                'worst_mistake': None
+                'worst_mistake': None,
+                'brilliant_moves': 0,
+                'neutral_moves': 0,
+                'mistake_moves': 0
             }
         }
         
@@ -186,9 +247,23 @@ class MistakeAnalysisService:
             board = game.board()
             player_is_white = (player_color.lower() == 'white')
             
-            prev_eval = None
+            # First pass: Count total player moves
+            total_player_moves = 0
+            for move in game.mainline_moves():
+                is_player_move = (board.turn == chess.WHITE and player_is_white) or \
+                                 (board.turn == chess.BLACK and not player_is_white)
+                if is_player_move:
+                    total_player_moves += 1
+                board.push(move)
+            
+            # Determine which moves to analyze
+            moves_to_analyze = self._select_moves_to_analyze(total_player_moves)
+            
+            # Second pass: Analyze selected moves
+            board = game.board()
             move_number = 0
             ply = 0  # Half-moves (increments every move)
+            player_move_index = 0  # Track player move index (0-based)
             
             for move in game.mainline_moves():
                 ply += 1
@@ -206,42 +281,49 @@ class MistakeAnalysisService:
                 if is_player_move:
                     mistakes[stage]['total_moves'] += 1
                     
-                    # Get evaluation before move
-                    current_eval = self._evaluate_position(board)
+                    # Check if this move should be analyzed
+                    should_analyze = player_move_index in moves_to_analyze
                     
-                    # Make the move
-                    board.push(move)
-                    
-                    # Get evaluation after move (from opponent's perspective, so negate)
-                    new_eval_opponent = self._evaluate_position(board)
-                    new_eval = -new_eval_opponent if new_eval_opponent is not None else None
-                    
-                    # Calculate centipawn loss
-                    if current_eval is not None and new_eval is not None:
-                        cp_loss = current_eval - new_eval
+                    if should_analyze:
+                        # Get evaluation before move
+                        current_eval = self._evaluate_position(board)
                         
-                        # PRD v2.2: Early stop for obvious blunders (>500 CP)
-                        if cp_loss >= self.EARLY_STOP_THRESHOLD:
-                            # Record as blunder and continue without detailed analysis
-                            mistakes[stage]['cp_losses'].append(cp_loss)
-                            mistakes[stage]['blunders'] += 1
-                            
-                            if mistakes[stage]['worst_mistake'] is None or \
-                               cp_loss > mistakes[stage]['worst_mistake']['cp_loss']:
-                                mistakes[stage]['worst_mistake'] = {
-                                    'move_number': move_number,
-                                    'cp_loss': cp_loss,
-                                    'type': 'blunder'
-                                }
-                            continue
+                        # PRD v2.3: Skip analyzing heavily winning/losing positions (>600 CP)
+                        if current_eval is not None and abs(current_eval) > self.SKIP_EVAL_THRESHOLD:
+                            board.push(move)
+                            player_move_index += 1
+                            continue  # Skip analysis, game already heavily decided
                         
-                        # Only count if it's a significant loss
-                        if cp_loss > 0:
-                            mistake_type = self._classify_mistake(cp_loss)
+                        # Make the move
+                        board.push(move)
+                        
+                        # Get evaluation after move (from opponent's perspective, so negate)
+                        new_eval_opponent = self._evaluate_position(board)
+                        new_eval = -new_eval_opponent if new_eval_opponent is not None else None
+                    
+                        # Calculate centipawn change (positive = gain, negative = loss)
+                        if current_eval is not None and new_eval is not None:
+                            cp_change = new_eval - current_eval  # Positive if position improved
+                            cp_loss = current_eval - new_eval  # Positive if position worsened
                             
-                            if mistake_type:
+                            # PRD v2.5: Classify move quality
+                            if cp_change >= 100:
+                                # Brilliant move: ≥+100 CP gain
+                                mistakes[stage]['brilliant_moves'] += 1
+                            elif cp_loss >= 50:
+                                # Mistake move: ≥-50 CP loss
+                                mistakes[stage]['mistake_moves'] += 1
+                                
+                                # Also update old tracking for backward compatibility
+                                mistake_type = self._classify_mistake(cp_loss)
+                                if mistake_type == 'inaccuracy':
+                                    mistakes[stage]['inaccuracies'] += 1
+                                elif mistake_type == 'mistake':
+                                    mistakes[stage]['mistakes'] += 1
+                                elif mistake_type == 'blunder':
+                                    mistakes[stage]['blunders'] += 1
+                                
                                 mistakes[stage]['cp_losses'].append(cp_loss)
-                                mistakes[stage][f'{mistake_type}s'] += 1
                                 
                                 # Track worst mistake
                                 if mistakes[stage]['worst_mistake'] is None or \
@@ -249,8 +331,16 @@ class MistakeAnalysisService:
                                     mistakes[stage]['worst_mistake'] = {
                                         'move_number': move_number,
                                         'cp_loss': cp_loss,
-                                        'type': mistake_type
+                                        'type': mistake_type or 'mistake'
                                     }
+                            else:
+                                # Neutral move: -49 to +99 CP
+                                mistakes[stage]['neutral_moves'] += 1
+                    else:
+                        # Move not selected for analysis, just push it
+                        board.push(move)
+                    
+                    player_move_index += 1
                 else:
                     # Opponent's move
                     board.push(move)
@@ -261,7 +351,7 @@ class MistakeAnalysisService:
             logger.error(f"Error analyzing game: {e}")
             return mistakes
     
-    def aggregate_mistake_analysis(self, games_data: List[Dict], username: str) -> Dict:
+    def aggregate_mistake_analysis(self, games_data: List[Dict], username: str, progress_callback=None) -> Dict:
         """
         Aggregate mistake analysis across all games.
         PRD v2.2: Analyzes exactly 2 games (evenly distributed across time period) for 1-minute performance target.
@@ -270,6 +360,7 @@ class MistakeAnalysisService:
         Args:
             games_data: List of game dictionaries with 'pgn', player info, and game result
             username: Player's username to determine color
+            progress_callback: Optional callback function(current, total) to report progress
             
         Returns:
             Aggregated mistake analysis with statistics per stage
@@ -293,7 +384,14 @@ class MistakeAnalysisService:
                 'cp_losses': [],
                 'worst_game': None,
                 'avg_cp_loss': 0,
-                'critical_mistake_game': None  # PRD v2.1: Separate field for critical games
+                'critical_mistake_game': None,  # PRD v2.1: Separate field for critical games
+                # v2.5: New move quality tracking
+                'brilliant_moves': 0,
+                'neutral_moves': 0,
+                'mistake_moves': 0,
+                'avg_brilliant_per_game': 0.0,
+                'avg_neutral_per_game': 0.0,
+                'avg_mistakes_per_game': 0.0
             },
             'middle': {
                 'total_moves': 0,
@@ -304,7 +402,13 @@ class MistakeAnalysisService:
                 'cp_losses': [],
                 'worst_game': None,
                 'avg_cp_loss': 0,
-                'critical_mistake_game': None
+                'critical_mistake_game': None,
+                'brilliant_moves': 0,
+                'neutral_moves': 0,
+                'mistake_moves': 0,
+                'avg_brilliant_per_game': 0.0,
+                'avg_neutral_per_game': 0.0,
+                'avg_mistakes_per_game': 0.0
             },
             'endgame': {
                 'total_moves': 0,
@@ -315,7 +419,13 @@ class MistakeAnalysisService:
                 'cp_losses': [],
                 'worst_game': None,
                 'avg_cp_loss': 0,
-                'critical_mistake_game': None
+                'critical_mistake_game': None,
+                'brilliant_moves': 0,
+                'neutral_moves': 0,
+                'mistake_moves': 0,
+                'avg_brilliant_per_game': 0.0,
+                'avg_neutral_per_game': 0.0,
+                'avg_mistakes_per_game': 0.0
             },
             'sample_info': {
                 'total_games': len(games_data),
@@ -326,15 +436,23 @@ class MistakeAnalysisService:
         
         username_lower = username.lower()
         
-        # PRD v2.2: Sample exactly 2 games, distributed across time period
-        games_to_analyze = self._select_games_for_analysis(games_data, max_games=2)
+        # Iteration 5: Dynamic sampling logic
+        # <50 games: Analyze all games
+        # ≥50 games: Analyze 20% sample (time-distributed)
+        total_games = len(games_data)
+        if total_games < 50:
+            games_to_analyze = games_data  # Analyze all
+        else:
+            sample_size = max(1, int(total_games * 0.20))  # 20% of games
+            games_to_analyze = self._select_games_for_analysis(games_data, max_games=sample_size)
+        
         aggregated['sample_info']['analyzed_games'] = len(games_to_analyze)
         if len(games_data) > 0:
             aggregated['sample_info']['sample_percentage'] = round(
                 (len(games_to_analyze) / len(games_data)) * 100, 1
             )
         
-        logger.info(f"PRD v2.2: Analyzing {len(games_to_analyze)} games out of {len(games_data)} total games")
+        logger.info(f"Iteration 5: Analyzing {len(games_to_analyze)} games out of {len(games_data)} total games ({aggregated['sample_info']['sample_percentage']}% sample)")
         
         try:
             # Analyze selected games
@@ -357,16 +475,23 @@ class MistakeAnalysisService:
                 
                 pgn = game_data.get('pgn', '')
                 if not pgn:
+                    logger.warning(f"Game {idx} missing PGN, skipping")
                     continue
                 
                 # Analyze game
-                game_mistakes = self.analyze_game_mistakes(pgn, player_color)
+                try:
+                    game_mistakes = self.analyze_game_mistakes(pgn, player_color)
+                except Exception as e:
+                    logger.error(f"Error analyzing game {idx}: {e}")
+                    continue
                 
                 # Check if game qualifies for critical mistake link (PRD v2.1 criteria)
                 # Must meet ALL: player lost + resignation termination + significant CP drop
+                # Loss values from Chess.com: 'checkmated', 'timeout', 'resigned', 'abandoned', 'lose'
+                is_loss = player_result in ['checkmated', 'timeout', 'resigned', 'abandoned', 'lose']
                 is_qualifying_game = (
-                    player_result == 'lose' and 
-                    'resign' in termination.lower() if termination else False
+                    is_loss and 
+                    (('resign' in termination.lower()) if termination else False)
                 )
                 
                 # Aggregate results
@@ -380,6 +505,11 @@ class MistakeAnalysisService:
                     agg_stage['blunders'] += stage_data['blunders']
                     agg_stage['missed_opps'] += stage_data['missed_opps']
                     agg_stage['cp_losses'].extend(stage_data['cp_losses'])
+                    
+                    # v2.5: Aggregate new move quality metrics
+                    agg_stage['brilliant_moves'] += stage_data.get('brilliant_moves', 0)
+                    agg_stage['neutral_moves'] += stage_data.get('neutral_moves', 0)
+                    agg_stage['mistake_moves'] += stage_data.get('mistake_moves', 0)
                     
                     # Track worst game for this stage (general tracking)
                     worst_mistake = stage_data.get('worst_mistake')
@@ -419,9 +549,14 @@ class MistakeAnalysisService:
                 
                 # Log progress every 10 games
                 if (idx + 1) % 10 == 0:
-                    logger.info(f"Analyzed {idx + 1}/{len(games_data)} games")
+                    logger.info(f"Analyzed {idx + 1}/{len(games_to_analyze)} games")
+                
+                # Report progress to callback if provided
+                if progress_callback:
+                    progress_callback(idx + 1, len(games_to_analyze))
             
             # Calculate averages and apply significance threshold for critical mistakes
+            analyzed_games_count = len(games_to_analyze)
             for stage in ['early', 'middle', 'endgame']:
                 cp_losses = aggregated[stage]['cp_losses']
                 if cp_losses:
@@ -440,6 +575,18 @@ class MistakeAnalysisService:
                         aggregated[stage]['critical_mistake_game'] = None
                 else:
                     aggregated[stage]['avg_cp_loss'] = 0
+                
+                # v2.5: Calculate per-game averages for move quality
+                if analyzed_games_count > 0:
+                    aggregated[stage]['avg_brilliant_per_game'] = round(
+                        aggregated[stage]['brilliant_moves'] / analyzed_games_count, 1
+                    )
+                    aggregated[stage]['avg_neutral_per_game'] = round(
+                        aggregated[stage]['neutral_moves'] / analyzed_games_count, 1
+                    )
+                    aggregated[stage]['avg_mistakes_per_game'] = round(
+                        aggregated[stage]['mistake_moves'] / analyzed_games_count, 1
+                    )
             
             logger.info(f"Mistake analysis complete: {len(games_data)} games analyzed")
             
@@ -451,17 +598,17 @@ class MistakeAnalysisService:
         
         return aggregated
     
-    def _select_games_for_analysis(self, games_data: List[Dict], max_games: int = 2) -> List[Dict]:
+    def _select_games_for_analysis(self, games_data: List[Dict], max_games: int) -> List[Dict]:
         """
         Select games for analysis using time-distributed sampling.
-        PRD v2.2: Pick exactly max_games (default 2) evenly distributed across the time period.
+        Iteration 5: Used for ≥50 games scenario with dynamic max_games (20% of total).
         
         Args:
             games_data: List of game dictionaries
-            max_games: Maximum number of games to analyze (default: 2)
+            max_games: Number of games to analyze
             
         Returns:
-            List of selected games for analysis
+            List of selected games for analysis (time-distributed)
         """
         if not games_data:
             return []
@@ -485,22 +632,28 @@ class MistakeAnalysisService:
         return selected_games
     
     def _empty_aggregation(self) -> Dict:
-        """Return empty aggregation structure (PRD v2.2: includes sample_info)."""
+        """Return empty aggregation structure (PRD v2.5: includes move quality metrics)."""
         return {
             'early': {
                 'total_moves': 0, 'inaccuracies': 0, 'mistakes': 0, 'blunders': 0,
                 'missed_opps': 0, 'cp_losses': [], 'worst_game': None, 'avg_cp_loss': 0,
-                'critical_mistake_game': None
+                'critical_mistake_game': None,
+                'brilliant_moves': 0, 'neutral_moves': 0, 'mistake_moves': 0,
+                'avg_brilliant_per_game': 0.0, 'avg_neutral_per_game': 0.0, 'avg_mistakes_per_game': 0.0
             },
             'middle': {
                 'total_moves': 0, 'inaccuracies': 0, 'mistakes': 0, 'blunders': 0,
                 'missed_opps': 0, 'cp_losses': [], 'worst_game': None, 'avg_cp_loss': 0,
-                'critical_mistake_game': None
+                'critical_mistake_game': None,
+                'brilliant_moves': 0, 'neutral_moves': 0, 'mistake_moves': 0,
+                'avg_brilliant_per_game': 0.0, 'avg_neutral_per_game': 0.0, 'avg_mistakes_per_game': 0.0
             },
             'endgame': {
                 'total_moves': 0, 'inaccuracies': 0, 'mistakes': 0, 'blunders': 0,
                 'missed_opps': 0, 'cp_losses': [], 'worst_game': None, 'avg_cp_loss': 0,
-                'critical_mistake_game': None
+                'critical_mistake_game': None,
+                'brilliant_moves': 0, 'neutral_moves': 0, 'mistake_moves': 0,
+                'avg_brilliant_per_game': 0.0, 'avg_neutral_per_game': 0.0, 'avg_mistakes_per_game': 0.0
             },
             'sample_info': {
                 'total_games': 0,

@@ -23,6 +23,28 @@ logger = logging.getLogger(__name__)
 class AnalyticsService:
     """Service for advanced chess analytics calculations."""
     
+    @staticmethod
+    def _normalize_result(result: str) -> str:
+        """
+        Normalize Chess.com API result values to consistent format.
+        
+        Chess.com API result values:
+        - Wins: 'win'
+        - Losses: 'checkmated', 'timeout', 'resigned', 'abandoned', 'lose'
+        - Draws: 'agreed', 'repetition', 'timevsinsufficient', 'insufficient', 'stalemate', '50move'
+        
+        Returns: 'win', 'loss', or 'draw'
+        """
+        result_lower = result.lower() if result else ''
+        
+        if result_lower == 'win':
+            return 'win'
+        elif result_lower in ['checkmated', 'timeout', 'resigned', 'abandoned', 'lose']:
+            return 'loss'
+        else:
+            # All other results are draws
+            return 'draw'
+    
     def __init__(self, stockfish_path: str = 'stockfish', engine_depth: int = 12,
                  engine_enabled: bool = True, openai_api_key: str = '',
                  openai_model: str = 'gpt-4o-mini'):
@@ -149,8 +171,9 @@ class AnalyticsService:
                 player_data = black
                 opponent_data = white
             
-            # Get result
-            result = player_data.get('result', '')
+            # Get result and normalize it
+            raw_result = player_data.get('result', '')
+            result = self._normalize_result(raw_result)
             
             # Convert timestamp to user's timezone
             end_time = game.get('end_time', 0)
@@ -424,10 +447,10 @@ class AnalyticsService:
             if result == 'win':
                 daily_stats[date]['wins'] += 1
                 total_wins += 1
-            elif result in ['checkmated', 'timeout', 'resigned', 'lose', 'abandoned']:
+            elif result == 'loss':
                 daily_stats[date]['losses'] += 1
                 total_losses += 1
-            else:
+            else:  # result == 'draw'
                 daily_stats[date]['draws'] += 1
                 total_draws += 1
             
@@ -479,7 +502,10 @@ class AnalyticsService:
         }
     
     def _analyze_color_performance(self, games: List[Dict]) -> Dict:
-        """Analyze performance by color (white vs black)."""
+        """Analyze performance by color (white vs black).
+        
+        Iteration 5: Added explicit W/L/D counts and total_games to summary.
+        """
         white_daily = defaultdict(lambda: {'wins': 0, 'losses': 0, 'draws': 0})
         black_daily = defaultdict(lambda: {'wins': 0, 'losses': 0, 'draws': 0})
         
@@ -497,14 +523,14 @@ class AnalyticsService:
             if result == 'win':
                 daily_dict[date]['wins'] += 1
                 total_dict['wins'] += 1
-            elif result in ['checkmated', 'timeout', 'resigned', 'lose', 'abandoned']:
+            elif result == 'loss':
                 daily_dict[date]['losses'] += 1
                 total_dict['losses'] += 1
-            else:
+            else:  # result == 'draw'
                 daily_dict[date]['draws'] += 1
                 total_dict['draws'] += 1
         
-        # Calculate win rates
+        # Calculate win rates and totals
         white_games = sum(white_total.values())
         black_games = sum(black_total.values())
         
@@ -515,12 +541,20 @@ class AnalyticsService:
             'white': {
                 'daily_stats': [{'date': d, **white_daily[d]} for d in sorted(white_daily.keys())],
                 'win_rate': round(white_win_rate, 2),
-                'total': white_total
+                'total_games': white_games,  # Iteration 5: Added
+                'wins': white_total['wins'],  # Iteration 5: Added
+                'losses': white_total['losses'],  # Iteration 5: Added
+                'draws': white_total['draws'],  # Iteration 5: Added
+                'total': white_total  # Keep for backward compatibility
             },
             'black': {
                 'daily_stats': [{'date': d, **black_daily[d]} for d in sorted(black_daily.keys())],
                 'win_rate': round(black_win_rate, 2),
-                'total': black_total
+                'total_games': black_games,  # Iteration 5: Added
+                'wins': black_total['wins'],  # Iteration 5: Added
+                'losses': black_total['losses'],  # Iteration 5: Added
+                'draws': black_total['draws'],  # Iteration 5: Added
+                'total': black_total  # Keep for backward compatibility
             }
         }
     
@@ -581,7 +615,7 @@ class AnalyticsService:
         total_losses = 0
         
         for game in games:
-            if game['result'] in ['checkmated', 'timeout', 'resigned', 'lose', 'abandoned']:
+            if game['result'] == 'loss':
                 termination_counts[game['termination']] += 1
                 total_losses += 1
         
@@ -593,54 +627,63 @@ class AnalyticsService:
     def _analyze_opening_performance(self, games: List[Dict]) -> Dict:
         """
         Analyze performance by chess opening, split by color.
-        Returns best and worst performing openings for white and black separately.
+        PRD v2.5: Changed to top 5 most common openings per color (frequency-based)
+        with first 6 moves, Lichess URL, and Chess.com example game URL.
         """
+        import urllib.parse
+        
         # Track stats by color and opening
         white_opening_stats = defaultdict(lambda: {
-            'wins': 0, 'losses': 0, 'draws': 0, 'games': 0, 'sample_pgn': None
+            'wins': 0, 'losses': 0, 'draws': 0, 'games': 0, 'sample_pgn': None, 'example_game_url': None
         })
         black_opening_stats = defaultdict(lambda: {
-            'wins': 0, 'losses': 0, 'draws': 0, 'games': 0, 'sample_pgn': None
+            'wins': 0, 'losses': 0, 'draws': 0, 'games': 0, 'sample_pgn': None, 'example_game_url': None
         })
         
         for game in games:
             opening = game['opening_name']
-            if opening == 'Unknown':
+            if opening == 'Unknown Opening':
                 continue
             
             player_color = game['player_color']
             result = game['result']
             pgn = game.get('pgn', '')
+            game_url = game.get('url', '')
             
             # Select the right stats dict based on color
             stats = white_opening_stats if player_color == 'white' else black_opening_stats
             
             stats[opening]['games'] += 1
             
-            # Store a sample PGN for move extraction
+            # Store a sample PGN and game URL for move extraction (first occurrence)
             if stats[opening]['sample_pgn'] is None and pgn:
                 stats[opening]['sample_pgn'] = pgn
+                stats[opening]['example_game_url'] = game_url  # Iteration 5: Added
             
             if result == 'win':
                 stats[opening]['wins'] += 1
-            elif result in ['checkmated', 'timeout', 'resigned', 'lose', 'abandoned']:
+            elif result == 'loss':
                 stats[opening]['losses'] += 1
-            else:
+            else:  # result == 'draw'
                 stats[opening]['draws'] += 1
         
         def process_openings_by_color(opening_stats):
-            """Process opening stats for a specific color."""
+            """Process opening stats for a specific color.
+            PRD v2.5: Return top 5 most common by games played (frequency-based).
+            """
             all_openings = []
             for opening, stats in opening_stats.items():
                 total = stats['games']
-                if total < 2:  # Skip openings with less than 2 games
-                    continue
-                    
                 win_rate = (stats['wins'] / total * 100) if total > 0 else 0
                 
                 # Extract first 6 moves from sample PGN
                 first_moves = self._extract_first_six_moves(stats['sample_pgn'])
                 fen = self._get_opening_position_fen(stats['sample_pgn'])
+                
+                # Generate Lichess URL
+                lichess_url = ''
+                if fen:
+                    lichess_url = f"https://lichess.org/editor/{urllib.parse.quote(fen)}"
                 
                 all_openings.append({
                     'opening': opening,
@@ -650,21 +693,18 @@ class AnalyticsService:
                     'draws': stats['draws'],
                     'win_rate': round(win_rate, 2),
                     'first_moves': first_moves,
-                    'fen': fen
+                    'fen': fen,
+                    'lichess_url': lichess_url,  # Iteration 5: Added
+                    'example_game_url': stats['example_game_url']  # Iteration 5: Added
                 })
             
-            # Sort by win rate (descending) for best openings
-            all_openings.sort(key=lambda x: (x['win_rate'], x['games']), reverse=True)
-            best_openings = all_openings[:5]  # Top 5 best
+            # PRD v2.5: Sort by games played (descending) for most common
+            all_openings.sort(key=lambda x: x['games'], reverse=True)
+            top_5_common = all_openings[:5]  # Top 5 most common (v2.5)
             
-            # Sort by win rate (ascending) for worst openings
-            worst_openings = sorted(all_openings, key=lambda x: (x['win_rate'], -x['games']))[:5]
-            
-            return {
-                'best_openings': best_openings,
-                'worst_openings': worst_openings
-            }
+            return top_5_common
         
+        # Iteration 5: Return separate lists for white and black
         return {
             'white': process_openings_by_color(white_opening_stats),
             'black': process_openings_by_color(black_opening_stats)
@@ -790,9 +830,9 @@ class AnalyticsService:
             
             if result == 'win':
                 categories[category]['wins'] += 1
-            elif result in ['checkmated', 'timeout', 'resigned', 'lose', 'abandoned']:
+            elif result == 'loss':
                 categories[category]['losses'] += 1
-            else:
+            else:  # result == 'draw'
                 categories[category]['draws'] += 1
         
         # Calculate win rates and average opponent ratings for each category
@@ -835,9 +875,9 @@ class AnalyticsService:
             
             if result == 'win':
                 periods[period]['wins'] += 1
-            elif result in ['checkmated', 'timeout', 'resigned', 'lose', 'abandoned']:
+            elif result == 'loss':
                 periods[period]['losses'] += 1
-            else:
+            else:  # result == 'draw'
                 periods[period]['draws'] += 1
         
         # Calculate win rates and average ratings

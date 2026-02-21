@@ -6,7 +6,7 @@ PRD v2.1: Updated to require EXACTLY 9 section-specific + 1 overall recommendati
 import json
 import logging
 from typing import Dict, List, Optional
-import openai
+from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
@@ -79,29 +79,16 @@ class ChessAdvisorService:
 You are an expert chess coach analyzing a player's performance data. Your goal is to provide 
 concise, actionable advice to help them improve their chess skills.
 
-Based on the provided statistics, you MUST generate EXACTLY:
-1. Nine (9) section-specific recommendations - ONE for each section (1-9):
-   - Section 1: Overall Performance
-   - Section 2: Color Performance  
-   - Section 3: Rating Progression
-   - Section 4: How You Win
-   - Section 5: How You Lose
-   - Section 6: Opening Performance
-   - Section 7: Opponent Strength
-   - Section 8: Time of Day Performance
-   - Section 9: Mistake Analysis
-2. One (1) overall recommendation that synthesizes all insights
+Based on the provided statistics from all 9 sections of analysis, generate ONE specific 
+recommendation for EACH of the 9 sections (1-2 bullet points per section).
 
-DO NOT skip any section. ALL 9 sections must receive a specific recommendation.
+Format for section recommendations:
+- Each section gets 1-2 concise, actionable bullet points
+- Focus on the most impactful insight from that specific section
+- Be specific with data references (e.g., "win rate dropped from 60% to 45%")
+- Each bullet point should be 1-2 sentences maximum
 
-Format your response with clear section labels exactly as shown in the user prompt.
-Each recommendation should:
-- Be specific and actionable
-- Reference concrete data from the analysis
-- Provide clear next steps for improvement
-- Be concise (1-2 sentences max)
-
-Focus on the most impactful areas for improvement. Prioritize:
+Prioritize:
 1. Patterns with clear negative impact (e.g., high timeout losses)
 2. Significant performance gaps (e.g., 20%+ difference between time periods)
 3. Mistake patterns that repeat across games
@@ -110,7 +97,7 @@ Focus on the most impactful areas for improvement. Prioritize:
 Avoid:
 - Generic advice ("study more tactics")
 - Obvious statements ("you lose when you blunder")
-- Skipping any section (CRITICAL: all 9 sections must have recommendations)
+- Long paragraphs or overly detailed explanations
 
 Tone: Encouraging but honest, like a supportive coach.
 """
@@ -120,48 +107,48 @@ Analyze this chess player's performance and provide coaching recommendations:
 
 {summary_data_json}
 
-Provide recommendations in this EXACT format (all 9 sections are MANDATORY):
+Provide your recommendations in this EXACT format:
 
 **Section 1 - Overall Performance:**
-- [Specific recommendation based on win rate trends and overall stats]
+• [Actionable insight 1]
+• [Actionable insight 2 if needed]
 
 **Section 2 - Color Performance:**
-- [Specific recommendation based on White vs Black performance]
+• [Actionable insight]
 
-**Section 3 - Rating Progression:**
-- [Specific recommendation based on rating changes and trends]
+**Section 3 - ELO Progression:**
+• [Actionable insight]
 
-**Section 4 - How You Win:**
-- [Specific recommendation based on winning termination patterns]
+**Section 4 - Termination Wins:**
+• [Actionable insight]
 
-**Section 5 - How You Lose:**
-- [Specific recommendation based on losing termination patterns]
+**Section 5 - Termination Losses:**
+• [Actionable insight]
 
 **Section 6 - Opening Performance:**
-- [Specific recommendation based on best/worst openings]
+• [Actionable insight]
 
 **Section 7 - Opponent Strength:**
-- [Specific recommendation based on performance vs different rated opponents]
+• [Actionable insight]
 
 **Section 8 - Time of Day:**
-- [Specific recommendation based on time period performance]
+• [Actionable insight]
 
-**Section 9 - Mistake Analysis:**
-- [Specific recommendation based on mistake patterns by game stage]
+**Section 9 - Move Analysis:**
+• [Actionable insight]
 
-**Overall Recommendation:**
-- [One comprehensive recommendation that synthesizes all insights and provides a clear action plan]
+Keep each bullet point concise (1-2 sentences maximum).
 """
     
     def __init__(self, api_key: str, model: str = 'gpt-4o-mini', 
-                 max_tokens: int = 500, temperature: float = 0.7):
+                 max_tokens: int = 600, temperature: float = 0.7):
         """
         Initialize AI advisor service.
         
         Args:
             api_key: OpenAI API key
             model: Model to use (default: gpt-4o-mini for cost efficiency)
-            max_tokens: Maximum response tokens
+            max_tokens: Maximum response tokens (increased to 600 for v2.7 section-based recommendations)
             temperature: Sampling temperature (0-1)
         """
         self.api_key = api_key
@@ -169,8 +156,8 @@ Provide recommendations in this EXACT format (all 9 sections are MANDATORY):
         self.max_tokens = max_tokens
         self.temperature = temperature
         
-        if self.api_key:
-            openai.api_key = self.api_key
+        # Initialize OpenAI client (new API format)
+        self.client = OpenAI(api_key=self.api_key) if self.api_key else None
     
     def _prepare_summary_data(self, analysis_results: Dict, username: str, 
                               date_range: str) -> Dict:
@@ -425,9 +412,7 @@ Provide recommendations in this EXACT format (all 9 sections are MANDATORY):
             date_range: Date range string
             
         Returns:
-            Dictionary with 'section_suggestions' (list of 9 dicts), 
-            'overall_recommendation', 'youtube_videos' (list), 
-            'tokens_used', and 'estimated_cost'
+            Dictionary with 'section_suggestions' (list of 9 dicts)
         """
         if not self.api_key:
             logger.warning("OpenAI API key not configured, using fallback advice")
@@ -445,8 +430,8 @@ Provide recommendations in this EXACT format (all 9 sections are MANDATORY):
                 summary_data_json=json.dumps(summary_data, indent=2)
             )
             
-            # Call OpenAI API
-            response = openai.ChatCompletion.create(
+            # Call OpenAI API (new client format)
+            response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": self.SYSTEM_PROMPT},
@@ -462,18 +447,13 @@ Provide recommendations in this EXACT format (all 9 sections are MANDATORY):
             advice_text = response.choices[0].message.content
             parsed_advice = self._parse_advice_response(advice_text)
             
-            # Log token usage
+            # Log token usage internally (v2.6: not returned to user)
             tokens_used = response.usage.total_tokens
             estimated_cost = self._calculate_cost(tokens_used)
-            
-            logger.info(f"AI advice generated: {tokens_used} tokens, ${estimated_cost:.4f}")
+            self._log_usage(tokens_used, estimated_cost)
             
             return {
-                'section_suggestions': parsed_advice['suggestions'],
-                'overall_recommendation': parsed_advice['overall'],
-                'youtube_videos': youtube_videos,
-                'tokens_used': tokens_used,
-                'estimated_cost': estimated_cost
+                'section_suggestions': parsed_advice['suggestions']
             }
             
         except Exception as e:
@@ -534,33 +514,60 @@ Provide recommendations in this EXACT format (all 9 sections are MANDATORY):
             response_text: Raw response from OpenAI
             
         Returns:
-            Dictionary with 'suggestions' and 'overall'
+            Dictionary with 'suggestions' (list of dicts)
         """
         lines = response_text.strip().split("\n")
         suggestions = []
-        overall = ""
         
         current_section = None
+        current_bullets = []
+        
         for line in lines:
             line = line.strip()
             if not line:
                 continue
             
-            # Identify sections
-            if "Section-Specific" in line or "**Section-Specific" in line:
-                current_section = "suggestions"
-            elif "Overall Recommendation" in line or "**Overall Recommendation" in line:
-                current_section = "overall"
-            elif line.startswith("-") or line.startswith("•") or line.startswith("*"):
-                suggestion = line.lstrip("-•*").strip()
-                if current_section == "suggestions":
-                    suggestions.append(suggestion)
-                elif current_section == "overall":
-                    overall = suggestion
+            # Check for section header (e.g., **Section 1 - Overall Performance:**)
+            if line.startswith('**Section') and (':' in line or ':**' in line):
+                # Save previous section if exists
+                if current_section:
+                    suggestions.append({
+                        'section_number': current_section['number'],
+                        'section_name': current_section['name'],
+                        'bullets': current_bullets.copy()
+                    })
+                
+                # Parse new section
+                section_match = line.replace('**', '').replace(':', '').strip()
+                parts = section_match.split(' - ', 1)
+                
+                try:
+                    section_num_str = parts[0].replace('Section', '').strip()
+                    section_num = int(section_num_str)
+                    section_name = parts[1].strip() if len(parts) > 1 else f"Section {section_num}"
+                    
+                    current_section = {'number': section_num, 'name': section_name}
+                    current_bullets = []
+                except (ValueError, IndexError):
+                    # If parsing fails, skip this line
+                    continue
+                    
+            elif line.startswith('•') or line.startswith('-') or line.startswith('*'):
+                # Bullet point - only for sections
+                if current_section is not None:
+                    bullet = line.lstrip('•-* ').strip()
+                    current_bullets.append(bullet)
+        
+        # Save last section if exists
+        if current_section:
+            suggestions.append({
+                'section_number': current_section['number'],
+                'section_name': current_section['name'],
+                'bullets': current_bullets.copy()
+            })
         
         return {
-            'suggestions': suggestions[:7],  # Limit to 7 suggestions
-            'overall': overall
+            'suggestions': suggestions
         }
     
     def _calculate_cost(self, tokens: int) -> float:
@@ -584,161 +591,158 @@ Provide recommendations in this EXACT format (all 9 sections are MANDATORY):
         cost = (input_tokens / 1_000_000 * 0.15) + (output_tokens / 1_000_000 * 0.60)
         return round(cost, 6)
     
+    def _log_usage(self, tokens: int, cost: float):
+        """
+        Log token usage and cost for internal monitoring (v2.6).
+        This is for cost tracking purposes only - not shown to users.
+        
+        Args:
+            tokens: Total tokens used
+            cost: Estimated cost in USD
+        """
+        logger.info(f"OpenAI API usage - Tokens: {tokens}, Estimated cost: ${cost:.6f}")
+    
     def _generate_fallback_advice(self, analysis_results: Dict) -> Dict:
         """
-        Generate rule-based advice if API fails.
-        Ensures all 9 sections receive recommendations.
+        Generate rule-based advice if API fails (v2.8: section bullets only).
         
         Args:
             analysis_results: Analysis results
             
         Returns:
-            Fallback advice dictionary with 9+1 recommendations
+            Fallback advice dictionary with section_suggestions
         """
         sections = analysis_results.get('sections', {})
-        suggestions = []
+        section_suggestions = []
         
-        # Section 1: Overall performance
-        overall = sections.get('overall_performance', {})
-        win_rate = overall.get('win_rate', 0)
-        if win_rate < 45:
-            advice1 = "Your win rate is below 45%. Focus on fundamentals: avoid blunders, complete tactical training, and analyze your losses."
-        elif win_rate > 55:
-            advice1 = f"Solid {win_rate:.1f}% win rate! Maintain consistency and challenge yourself against stronger opponents."
+        # Section 1 - Overall Performance
+        overall_perf = sections.get('overall_performance', {})
+        win_rate = overall_perf.get('win_rate', 0)
+        rating_change = overall_perf.get('rating_change', 0)
+        bullets_1 = []
+        if rating_change > 0:
+            bullets_1.append(f"Maintain your upward trend (+{rating_change} rating points)")
         else:
-            advice1 = "Your win rate shows steady play. Continue tracking your games to identify improvement trends."
-        suggestions.append({
-            "section_number": 1,
-            "section_name": "Overall Performance",
-            "advice": advice1
+            bullets_1.append(f"Focus on consistency to improve from {win_rate:.1f}% win rate")
+        section_suggestions.append({
+            'section_number': 1,
+            'section_name': 'Overall Performance',
+            'bullets': bullets_1
         })
         
-        # Section 2: Color performance
+        # Section 2 - Color Performance
         color_perf = sections.get('color_performance', {})
         white_wr = color_perf.get('white', {}).get('win_rate', 0)
         black_wr = color_perf.get('black', {}).get('win_rate', 0)
+        bullets_2 = []
         if abs(white_wr - black_wr) > 15:
-            weaker_color = 'Black' if white_wr > black_wr else 'White'
-            advice2 = f"Your {weaker_color} performance is significantly weaker ({min(white_wr, black_wr):.1f}% vs {max(white_wr, black_wr):.1f}%). Study your {weaker_color} openings and defensive techniques."
+            weaker_color = 'White' if white_wr < black_wr else 'Black'
+            bullets_2.append(f"Improve your {weaker_color} repertoire (currently weaker color)")
         else:
-            advice2 = "Your White and Black performance is balanced. Continue practicing with both colors."
-        suggestions.append({
-            "section_number": 2,
-            "section_name": "Color Performance",
-            "advice": advice2
+            bullets_2.append("Maintain balanced play with both colors")
+        section_suggestions.append({
+            'section_number': 2,
+            'section_name': 'Color Performance',
+            'bullets': bullets_2
         })
         
-        # Section 3: Rating progression
-        rating_change = overall.get('rating_change', 0)
+        # Section 3 - ELO Progression
+        elo_prog = sections.get('elo_progression', {})
+        bullets_3 = []
         if rating_change > 0:
-            advice3 = f"Rating up {rating_change} points - good momentum! Maintain consistent play to continue improving."
-        elif rating_change < -20:
-            advice3 = f"Rating down {abs(rating_change)} points. Review recent games to identify patterns causing losses."
+            bullets_3.append("Keep playing consistently to maintain rating momentum")
         else:
-            advice3 = "Rating is stable. Focus on consistent play and gradual improvement through study."
-        suggestions.append({
-            "section_number": 3,
-            "section_name": "Rating Progression",
-            "advice": advice3
+            bullets_3.append("Analyze losses to identify and fix rating leaks")
+        section_suggestions.append({
+            'section_number': 3,
+            'section_name': 'ELO Progression',
+            'bullets': bullets_3
         })
         
-        # Section 4: How you win
+        # Section 4 - Termination Wins
         term_wins = sections.get('termination_wins', {})
-        most_common_win = self._get_top_termination(term_wins.get('breakdown', {}))
-        advice4 = f"Most wins by {most_common_win}. Continue developing your winning patterns and tactical skills."
-        suggestions.append({
-            "section_number": 4,
-            "section_name": "How You Win",
-            "advice": advice4
+        bullets_4 = []
+        bullets_4.append("Continue capitalizing on opponent mistakes")
+        section_suggestions.append({
+            'section_number': 4,
+            'section_name': 'Termination Wins',
+            'bullets': bullets_4
         })
         
-        # Section 5: How you lose
+        # Section 5 - Termination Losses
         term_losses = sections.get('termination_losses', {})
         timeout_losses = term_losses.get('breakdown', {}).get('timeout', 0)
         total_losses = term_losses.get('total_losses', 1)
-        if timeout_losses / total_losses > 0.25:
-            advice5 = f"Time pressure is a major issue ({(timeout_losses/total_losses*100):.0f}% losses by timeout). Play longer time controls to build clock management skills."
+        bullets_5 = []
+        if timeout_losses / total_losses > 0.20:
+            bullets_5.append(f"Critical: Reduce timeout losses ({(timeout_losses/total_losses*100):.0f}% of losses)")
         else:
-            advice5 = "Review your losses to identify and fix recurring weaknesses."
-        suggestions.append({
-            "section_number": 5,
-            "section_name": "How You Lose",
-            "advice": advice5
+            bullets_5.append("Good time management - maintain current pace")
+        section_suggestions.append({
+            'section_number': 5,
+            'section_name': 'Termination Losses',
+            'bullets': bullets_5
         })
         
-        # Section 6: Opening performance
+        # Section 6 - Opening Performance
         openings = sections.get('opening_performance', {})
         worst_openings = self._get_worst_openings(openings, bottom_n=1)
+        bullets_6 = []
         if worst_openings:
-            advice6 = f"Your weakest opening ({worst_openings[0]}) needs work. Consider studying key lines or switching."
+            bullets_6.append(f"Review or replace your weakest opening ({worst_openings[0]})")
         else:
-            advice6 = "Study your most-played openings to improve your repertoire."
-        suggestions.append({
-            "section_number": 6,
-            "section_name": "Opening Performance",
-            "advice": advice6
+            bullets_6.append("Continue studying your opening repertoire")
+        section_suggestions.append({
+            'section_number': 6,
+            'section_name': 'Opening Performance',
+            'bullets': bullets_6
         })
         
-        # Section 7: Opponent strength
+        # Section 7 - Opponent Strength
         opponent = sections.get('opponent_strength', {})
-        higher_rated_wr = opponent.get('higher_rated', {}).get('win_rate', 0)
-        if higher_rated_wr < 30:
-            advice7 = f"You struggle against stronger opponents ({higher_rated_wr:.0f}% win rate). Focus on solid, defensive play and study endgame technique."
-        else:
-            advice7 = "Play against varied opposition to improve against all rating levels."
-        suggestions.append({
-            "section_number": 7,
-            "section_name": "Opponent Strength",
-            "advice": advice7
+        bullets_7 = []
+        bullets_7.append("Challenge yourself by playing opponents at all rating levels")
+        section_suggestions.append({
+            'section_number': 7,
+            'section_name': 'Opponent Strength',
+            'bullets': bullets_7
         })
         
-        # Section 8: Time of day
+        # Section 8 - Time of Day
         time_perf = sections.get('time_of_day', {})
         best_time = self._get_best_time(time_perf)
-        worst_time = self._get_worst_time(time_perf)
-        morning_wr = time_perf.get('morning', {}).get('win_rate', 0)
-        afternoon_wr = time_perf.get('afternoon', {}).get('win_rate', 0)
-        night_wr = time_perf.get('night', {}).get('win_rate', 0)
-        
-        times = {'morning': morning_wr, 'afternoon': afternoon_wr, 'night': night_wr}
-        if times and max(times.values()) - min(times.values()) > 15:
-            advice8 = f"Your {best_time} performance ({times[best_time]:.0f}%) is much better than {worst_time} ({times[worst_time]:.0f}%). Schedule important games during peak hours."
+        bullets_8 = []
+        if best_time != 'N/A':
+            best_wr = time_perf.get(best_time, {}).get('win_rate', 0)
+            if best_wr > 55:
+                bullets_8.append(f"Play more games during {best_time} ({best_wr:.0f}% win rate)")
         else:
-            advice8 = "Play during your peak performance times for better results."
-        suggestions.append({
-            "section_number": 8,
-            "section_name": "Time of Day Performance",
-            "advice": advice8
+            bullets_8.append("Track time-of-day patterns over more games")
+        section_suggestions.append({
+            'section_number': 8,
+            'section_name': 'Time of Day',
+            'bullets': bullets_8
         })
         
-        # Section 9: Mistake analysis
+        # Section 9 - Move Analysis
         mistake_analysis = sections.get('mistake_analysis', {})
+        bullets_9 = []
         if mistake_analysis:
-            weakest_stage = mistake_analysis.get('weakest_stage', 'N/A')
-            if weakest_stage != 'N/A':
-                advice9 = f"{weakest_stage.capitalize()}game is your weakest stage. Focus study time on tactical patterns in this phase."
+            weakest_stage = mistake_analysis.get('weakest_stage', '')
+            if weakest_stage:
+                stage_data = mistake_analysis.get(weakest_stage, {})
+                mistakes = stage_data.get('avg_mistakes_per_game', 0)
+                bullets_9.append(f"Focus on {weakest_stage}game tactics ({mistakes:.1f} avg mistakes)")
             else:
-                advice9 = "Focus on reducing mistakes through tactical training and game analysis."
+                bullets_9.append("Practice tactics regularly to reduce mistakes")
         else:
-            advice9 = "Focus on reducing mistakes in all game stages through targeted practice."
-        suggestions.append({
-            "section_number": 9,
-            "section_name": "Mistake Analysis",
-            "advice": advice9
+            bullets_9.append("Analyze your games to identify mistake patterns")
+        section_suggestions.append({
+            'section_number': 9,
+            'section_name': 'Move Analysis',
+            'bullets': bullets_9
         })
-        
-        # Overall recommendation
-        overall_rec = "Continue analyzing your games regularly. Focus on time management, opening preparation, and tactical training to improve your overall play."
-        
-        # Get video recommendations even for fallback
-        summary_data = self._prepare_summary_data(analysis_results, '', '')
-        youtube_videos = self._get_opening_videos(summary_data)
         
         return {
-            'section_suggestions': suggestions,
-            'overall_recommendation': overall_rec,
-            'youtube_videos': youtube_videos,
-            'tokens_used': 0,
-            'estimated_cost': 0,
-            'fallback': True
+            'section_suggestions': section_suggestions
         }

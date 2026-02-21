@@ -855,27 +855,63 @@ body {
 }
 
 .opening-row {
-    display: grid;
-    grid-template-columns: 2fr 1fr 3fr;
-    gap: 1rem;
-    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 1rem;
     background-color: var(--white);
-    border-radius: 6px;
-    margin-bottom: 0.5rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+/* Iteration 5: Opening header with name and games count */
+.opening-header {
+    display: flex;
+    justify-content: space-between;
     align-items: center;
+}
+
+/* Iteration 5: Opening details section for moves and links */
+.opening-details {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
 }
 
 /* PRD v2.1: Styling for first 6 moves display */
 .opening-moves {
-    grid-column: 1 / -1;
     font-family: 'Courier New', monospace;
     font-size: 0.9em;
     color: #555;
-    margin: 8px 0 0 0;
     padding: 8px 12px;
     background-color: #f8f9fa;
     border-left: 3px solid var(--secondary-color);
     border-radius: 4px;
+}
+
+/* Iteration 5: Links container */
+.opening-links {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+/* Iteration 5: Individual link styling */
+.opening-link {
+    display: inline-block;
+    padding: 0.4rem 0.8rem;
+    background-color: var(--secondary-color);
+    color: white;
+    text-decoration: none;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    transition: background-color 0.3s;
+}
+
+.opening-link:hover {
+    background-color: var(--primary-color);
+    text-decoration: none;
 }
 
 .opening-name {
@@ -886,6 +922,7 @@ body {
 .opening-games {
     font-size: 0.9rem;
     color: var(--dark-gray);
+    font-weight: 500;
 }
 
 .opening-stats {
@@ -1195,6 +1232,47 @@ body {
     color: #27ae60;
 }
 
+/* v2.5: Move Quality Display */
+.move-quality {
+    display: inline-block;
+    min-width: 35px;
+    text-align: center;
+    font-weight: 500;
+}
+
+.quality-high {
+    color: #27ae60;  /* Green for high brilliant moves */
+    font-weight: 600;
+}
+
+.quality-medium {
+    color: #3498db;  /* Blue for medium brilliant moves */
+    font-weight: 500;
+}
+
+.quality-low {
+    color: #95a5a6;  /* Gray for low brilliant moves */
+}
+
+.quality-high-bad {
+    color: #e74c3c;  /* Red for many mistakes */
+    font-weight: 600;
+}
+
+.quality-medium-bad {
+    color: #f39c12;  /* Orange for some mistakes */
+    font-weight: 500;
+}
+
+.quality-low-good {
+    color: #27ae60;  /* Green for few mistakes */
+    font-weight: 500;
+}
+
+.quality-neutral {
+    color: #34495e;  /* Dark gray for neutral moves */
+}
+
 /* Critical Mistake Link */
 .critical-mistake-link {
     color: var(--secondary-color);
@@ -1436,4 +1514,33 @@ body {
         padding-left: 1.5rem;
         font-size: 0.95rem;
     }
+}
+
+/* Loading Spinner for Async Operations */
+.loading-spinner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    padding: 1.5rem;
+}
+
+.spinner {
+     border: 4px solid var(--light-gray);
+    border-top: 4px solid var(--secondary-color);
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.loading-text {
+    font-size: 1rem;
+    color: var(--text-dark);
+    font-weight: 500;
 }

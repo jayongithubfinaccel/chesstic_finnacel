@@ -34,10 +34,10 @@ class Config:
     OPENAI_TEMPERATURE = 0.7
     
     # Stockfish engine settings (Milestone 8: Mistake Analysis)
-    STOCKFISH_PATH = os.environ.get('STOCKFISH_PATH', 'stockfish')
+    STOCKFISH_PATH = os.environ.get('STOCKFISH_PATH', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'stockfish.exe'))
     ENGINE_ANALYSIS_ENABLED = os.environ.get('ENGINE_ANALYSIS_ENABLED', 'True').lower() == 'true'
-    ENGINE_DEPTH = int(os.environ.get('ENGINE_DEPTH', '15'))
-    ENGINE_TIME_LIMIT = float(os.environ.get('ENGINE_TIME_LIMIT', '2.0'))
+    ENGINE_DEPTH = int(os.environ.get('ENGINE_DEPTH', '12'))  # Reduced from 15 to 12 for faster analysis
+    ENGINE_TIME_LIMIT = float(os.environ.get('ENGINE_TIME_LIMIT', '1.5'))  # Reduced from 2.0 to 1.5 seconds
     
     # AI Advisor cache settings
     AI_ADVICE_CACHE_TTL = 3600  # 1 hour in seconds

@@ -90,7 +90,8 @@ class TestAnalyzeDetailedEndpoint:
         assert response.status_code == 400
         data = json.loads(response.data)
         assert data['status'] == 'error'
-        assert 'date range' in data['error'].lower()
+        # Actual error message: 'Start date must be before end date'
+        assert 'start date must be before end date' in data['error'].lower()
     
     def test_analyze_detailed_date_range_too_long(self, client):
         """Test endpoint with date range longer than 1 year."""

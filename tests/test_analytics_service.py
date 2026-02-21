@@ -175,8 +175,11 @@ class TestAnalyticsServiceTermination:
         result = analytics_service._analyze_termination_wins(enriched)
         
         assert isinstance(result, dict)
-        # Should have at least one win from sample data
-        assert any(v['count'] > 0 for v in result.values()) or len(result) == 0
+        assert 'total_wins' in result
+        assert 'breakdown' in result
+        assert isinstance(result['breakdown'], dict)
+        # Breakdown values are integers (counts), not dicts
+        assert all(isinstance(v, int) for v in result['breakdown'].values())
     
     def test_termination_losses_analysis(self, analytics_service, sample_games):
         """Test termination losses analysis."""
@@ -202,16 +205,26 @@ class TestAnalyticsServiceOpponentStrength:
         )
         result = analytics_service._analyze_opponent_strength(enriched)
         
-        assert 'lower_rated' in result
-        assert 'similar_rated' in result
-        assert 'higher_rated' in result
+        # Current structure: {'avg_opponent_rating': float, 'by_rating_diff': {...}}
+        assert 'avg_opponent_rating' in result
+        assert 'by_rating_diff' in result
         
-        for category in result.values():
+        # Check category keys (without '_rated' suffix)
+        categories = result['by_rating_diff']
+        assert 'lower' in categories
+        assert 'similar' in categories
+        assert 'higher' in categories
+        assert 'much_lower' in categories
+        assert 'much_higher' in categories
+        
+        # Verify each category has required fields
+        for category in categories.values():
             assert 'games' in category
             assert 'wins' in category
             assert 'losses' in category
             assert 'draws' in category
             assert 'win_rate' in category
+            assert 'avg_rating' in category
 
 
 class TestAnalyticsServiceTimeOfDay:

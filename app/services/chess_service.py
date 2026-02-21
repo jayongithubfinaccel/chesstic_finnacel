@@ -97,43 +97,53 @@ class ChessService:
         current = start
         
         # Fetch games for each month in the range
+        # Uses same logic as working notebook
         while current <= end:
             try:
                 games = self.get_games_by_month(username, current.year, current.month)
-                all_games.extend(games)
+                
+                # Filter games by date range (from notebook logic)
+                for game in games:
+                    game_date = datetime.fromtimestamp(game.get('end_time', 0))
+                    if start <= game_date <= end:
+                        all_games.append(game)
+                        
             except requests.exceptions.HTTPError:
                 pass  # No games for this month
             
-            # Move to next month
+            # Move to next month (set day to 1 to check all months in range)
             if current.month == 12:
-                current = current.replace(year=current.year + 1, month=1)
+                current = current.replace(year=current.year + 1, month=1, day=1)
             else:
-                current = current.replace(month=current.month + 1)
-        
-        # Filter games by date range
-        filtered_games = self._filter_games_by_date(all_games, start_date, end_date)
+                current = current.replace(month=current.month + 1, day=1)
         
         # Calculate statistics
-        stats = self._calculate_statistics(filtered_games, username)
+        stats = self._calculate_statistics(all_games, username)
         
         return {
             'username': username,
             'start_date': start_date,
             'end_date': end_date,
-            'total_games': len(filtered_games),
+            'total_games': len(all_games),
             'statistics': stats,
-            'games': filtered_games
+            'games': all_games
         }
     
     def _filter_games_by_date(self, games: List[Dict], start_date: str, end_date: str) -> List[Dict]:
-        """Filter games by date range."""
+        """Filter games by date range. End date is inclusive (includes entire day)."""
+        from datetime import timedelta
+        
         start = datetime.strptime(start_date, '%Y-%m-%d')
-        end = datetime.strptime(end_date, '%Y-%m-%d')
+        # Add one day to end date to make it inclusive of the entire last day
+        end = datetime.strptime(end_date, '%Y-%m-%d') + timedelta(days=1)
         
         filtered = []
         for game in games:
-            game_date = datetime.fromtimestamp(game.get('end_time', 0))
-            if start <= game_date <= end:
+            end_time = game.get('end_time', 0)
+            if not end_time:
+                continue
+            game_date = datetime.fromtimestamp(end_time)
+            if start <= game_date < end:  # Use < instead of <= for end since we added 1 day
                 filtered.append(game)
         
         return filtered

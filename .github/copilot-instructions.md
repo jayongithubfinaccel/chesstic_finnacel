@@ -76,6 +76,9 @@ Flask-based chess analytics website that pulls data from Chess.com API. Users en
 - Write unit tests for services and utilities
 - Use Playwright for end-to-end testing
 - Test error scenarios and edge cases
+- ensure both front end & backend are always tested after any changes
+- testing can be done using uv run pytest tests/test_integration_e2e.py -v --headed
+
 
 ## AI Agent Usage
 This project uses three specialized AI agents:

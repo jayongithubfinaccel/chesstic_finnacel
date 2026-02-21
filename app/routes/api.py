@@ -3,13 +3,55 @@ API routes for chess data operations.
 """
 from flask import request, jsonify, current_app
 import requests
+import traceback
+import threading
+import uuid
 from app.routes import api_bp
 from app.services.chess_service import ChessService
 from app.services.analytics_service import AnalyticsService
 from app.utils.validators import validate_username, validate_date_range, validate_timezone, get_date_range_error
+from app.utils import task_manager
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def run_mistake_analysis_background(task_id: str, games: list, username: str, analytics_service):
+    """
+    Run Stockfish mistake analysis in background thread.
+    
+    Args:
+        task_id: Unique task identifier
+        games: List of game dictionaries
+        username: Player's Chess.com username
+        analytics_service: AnalyticsService instance
+    """
+    try:
+        logger.info(f"Starting background mistake analysis for task {task_id}")
+        
+        # Create a progress callback function
+        def progress_callback(current: int, total: int):
+            """Update task progress"""
+            task_manager.update_task_progress(task_id, current, 'processing')
+        
+        # Run analysis with progress reporting
+        result = analytics_service.mistake_analyzer.aggregate_mistake_analysis(
+            games, username, progress_callback=progress_callback
+        )
+        
+        # Identify weakest stage
+        weakest_stage, reason = analytics_service.mistake_analyzer.get_weakest_stage(result)
+        result['weakest_stage'] = weakest_stage
+        result['weakest_stage_reason'] = reason
+        
+        # Store completed result
+        task_manager.complete_task(task_id, result)
+        logger.info(f"Background mistake analysis completed for task {task_id}")
+        
+    except Exception as e:
+        logger.error(f"Error in background mistake analysis for task {task_id}: {e}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        task_manager.fail_task(task_id, str(e))
 
 
 @api_bp.route('/analyze', methods=['POST'])
@@ -150,15 +192,21 @@ def analyze_detailed():
         
         # Fetch games from Chess.com
         try:
+            logger.info(f"Fetching games for {username} from {start_date} to {end_date}")
             result = chess_service.analyze_games(username, start_date, end_date)
             games = result.get('games', [])
+            logger.info(f"Fetched {len(games)} games successfully")
         except requests.exceptions.RequestException as e:
+            logger.error(f"Request error fetching games: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return jsonify({
                 'error': 'Failed to fetch games from Chess.com. Please try again later',
                 'status': 'error',
                 'details': str(e)
             }), 503
         except Exception as e:
+            logger.error(f"Unexpected error fetching games: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return jsonify({
                 'error': 'Error fetching game data',
                 'status': 'error',
@@ -219,17 +267,68 @@ def analyze_detailed():
             # Format date range for AI advisor context
             date_range = f"{start_date} to {end_date}"
             
-            # Perform analysis
-            logger.info(f"Starting analysis for {username}: {date_range}")
-            analysis = analytics_service.analyze_detailed(
-                games, 
-                username, 
-                timezone,
-                include_mistake_analysis=include_mistake_analysis,
-                include_ai_advice=include_ai_advice,
-                date_range=date_range
-            )
-            logger.info(f"Analysis complete: {analysis['total_games']} games processed")
+            # Perform analysis (without mistake analysis initially)
+            logger.info(f"Starting analysis for {username}: {date_range}, {len(games)} games")
+            logger.info(f"Analysis options: mistake_analysis={include_mistake_analysis}, ai_advice={include_ai_advice}")
+            
+            try:
+                # Run fast analysis first (no Stockfish - returns immediately)
+                analysis = analytics_service.analyze_detailed(
+                    games, 
+                    username, 
+                    timezone,
+                    include_mistake_analysis=False,  # Skip for immediate response
+                    include_ai_advice=include_ai_advice,
+                    date_range=date_range
+                )
+                logger.info(f"Fast analysis complete: {analysis['total_games']} games processed")
+                
+                # If mistake analysis requested, start in background
+                if include_mistake_analysis:
+                    # Generate unique task ID
+                    task_id = str(uuid.uuid4())
+                    
+                    # Calculate estimated games to analyze
+                    total_games = len(games)
+                    if total_games < 50:
+                        games_to_analyze = total_games
+                    else:
+                        games_to_analyze = max(10, min(50, int(total_games * 0.20)))
+                    
+                    estimated_time = games_to_analyze * 2.5  # 2.5 seconds per game
+                    
+                    # Create task
+                    task_manager.create_task(
+                        task_id, 
+                        total_items=games_to_analyze,
+                        metadata={
+                            'username': username,
+                            'total_games': total_games,
+                            'games_to_analyze': games_to_analyze
+                        }
+                    )
+                    
+                    # Start background thread
+                    thread = threading.Thread(
+                        target=run_mistake_analysis_background,
+                        args=(task_id, games, username, analytics_service),
+                        daemon=True
+                    )
+                    thread.start()
+                    logger.info(f"Started background mistake analysis thread for task {task_id}")
+                    
+                    # Add processing status to response
+                    analysis['sections']['mistake_analysis'] = {
+                        'status': 'processing',
+                        'task_id': task_id,
+                        'estimated_time': f"{int(estimated_time)} seconds",
+                        'message': f"Analyzing {games_to_analyze} games for mistakes..."
+                    }
+                
+            except Exception as analysis_error:
+                logger.error(f"Error in analyze_detailed: {analysis_error}")
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                raise
             
             # Build response
             response = {
@@ -242,10 +341,14 @@ def analyze_detailed():
                 'status': 'success'
             }
             
+            # Cleanup old tasks periodically
+            task_manager.cleanup_old_tasks()
+            
             return jsonify(response), 200
             
         except Exception as e:
             logger.error(f"Error analyzing game data: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return jsonify({
                 'error': 'Error analyzing game data',
                 'status': 'error',
@@ -253,6 +356,8 @@ def analyze_detailed():
             }), 500
     
     except Exception as e:
+        logger.error(f"Internal server error: {e}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
         return jsonify({
             'error': 'Internal server error',
             'status': 'error',
@@ -274,3 +379,42 @@ def get_player_profile(username):
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/analyze/mistake-status/<task_id>', methods=['GET'])
+def get_mistake_analysis_status(task_id):
+    """
+    Get status of background mistake analysis task.
+    
+    Args:
+        task_id: Unique task identifier from initial analysis request
+        
+    Returns:
+        JSON response with task status:
+        - processing: Task still running (with progress info)
+        - completed: Task finished (with analysis data)
+        - error: Task failed (with error message)
+        - not_found: Task ID doesn't exist
+    """
+    try:
+        logger.info(f"Status check for task {task_id}")
+        
+        # Get task status from task manager
+        status = task_manager.get_task_status(task_id)
+        
+        if status is None:
+            return jsonify({
+                'status': 'not_found',
+                'error': 'Task not found. It may have expired (tasks are kept for 1 hour).'
+            }), 404
+        
+        return jsonify(status), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting task status for {task_id}: {e}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        return jsonify({
+            'status': 'error',
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
