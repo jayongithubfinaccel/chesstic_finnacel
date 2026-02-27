@@ -258,10 +258,13 @@ def analyze_detailed():
             # Initialize analytics service with configuration
             analytics_service = AnalyticsService(
                 stockfish_path=config.get('STOCKFISH_PATH', 'stockfish'),
-                engine_depth=config.get('ENGINE_DEPTH', 15),
+                engine_depth=config.get('ENGINE_DEPTH', 8),
+                engine_time_limit=config.get('ENGINE_TIME_LIMIT', 0.2),
                 engine_enabled=config.get('ENGINE_ANALYSIS_ENABLED', True) and include_mistake_analysis,
                 openai_api_key=config.get('OPENAI_API_KEY', ''),
-                openai_model=config.get('OPENAI_MODEL', 'gpt-4o-mini')
+                openai_model=config.get('OPENAI_MODEL', 'gpt-4o-mini'),
+                use_lichess_cloud=config.get('USE_LICHESS_CLOUD', True),
+                lichess_timeout=config.get('LICHESS_API_TIMEOUT', 5.0)
             )
             
             # Format date range for AI advisor context

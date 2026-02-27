@@ -2,6 +2,7 @@
 Mistake analysis service using Stockfish engine for game evaluation.
 Milestone 8: Game Stage Mistake Analysis
 PRD v2.1: Updated critical mistake game link criteria (lost by resignation only)
+PRD v2.10 (Iteration 11): Lichess Cloud API integration for 10-20x performance improvement
 """
 import chess
 import chess.engine
@@ -10,6 +11,7 @@ from io import StringIO
 from typing import Dict, List, Optional, Tuple
 from collections import defaultdict
 import logging
+from app.services.lichess_evaluation_service import LichessEvaluationService
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +39,8 @@ class MistakeAnalysisService:
     MAX_MOVES_PER_GAME = 30       # Maximum moves to analyze per game
     
     def __init__(self, stockfish_path: str = 'stockfish', engine_depth: int = 10, 
-                 time_limit: float = 0.5, enabled: bool = True):
+                 time_limit: float = 0.5, enabled: bool = True, use_lichess_cloud: bool = True,
+                 lichess_timeout: float = 5.0):
         """
         Initialize mistake analysis service.
         
@@ -46,12 +49,18 @@ class MistakeAnalysisService:
             engine_depth: Analysis depth (default: 10, balanced for sampled moves in v2.3)
             time_limit: Time limit per position in seconds (default: 0.5s in v2.3)
             enabled: Whether engine analysis is enabled
+            use_lichess_cloud: Whether to use Lichess Cloud API first (default: True, v2.10)
+            lichess_timeout: Timeout for Lichess API calls in seconds (default: 5.0)
         """
         self.stockfish_path = stockfish_path
         self.engine_depth = engine_depth
         self.time_limit = time_limit
         self.enabled = enabled
+        self.use_lichess_cloud = use_lichess_cloud
         self.engine = None
+        
+        # Initialize Lichess Cloud service (Iteration 11)
+        self.lichess_service = LichessEvaluationService(timeout=lichess_timeout) if use_lichess_cloud else None
         
     def _start_engine(self) -> Optional[chess.engine.SimpleEngine]:
         """Start Stockfish engine."""
@@ -114,7 +123,8 @@ class MistakeAnalysisService:
     
     def _evaluate_position(self, board: chess.Board) -> Optional[int]:
         """
-        Evaluate position using Stockfish.
+        Evaluate position using Lichess Cloud API with Stockfish fallback.
+        PRD v2.10 (Iteration 11): Hybrid approach for 10-20x performance improvement.
         
         Args:
             board: Chess board position
@@ -122,14 +132,36 @@ class MistakeAnalysisService:
         Returns:
             Evaluation in centipawns (from current player's perspective), or None if error
         """
+        # Step 1: Try Lichess Cloud API first (fast path: 0.01-0.05s)
+        if self.use_lichess_cloud and self.lichess_service:
+            fen = board.fen()
+            lichess_eval = self.lichess_service.evaluate_position(fen)
+            
+            if lichess_eval is not None:
+                return lichess_eval  # Fast path succeeded
+        
+        # Step 2: Fallback to local Stockfish (slow path: 0.2-0.5s)
+        # Keep existing Stockfish code as requested - do not remove
         if not self.engine:
             return None
             
         try:
-            info = self.engine.analyse(
-                board, 
-                chess.engine.Limit(depth=self.engine_depth, time=self.time_limit)
-            )
+            # Use strict time limit for ultra-fast fallback when Lichess enabled (Iteration 11)
+            # When Lichess is handling 60-80% of positions, fallback accuracy is less critical
+            # movetime=100ms provides hard cutoff (vs depth which ignores time)
+            if self.use_lichess_cloud:
+                # Ultra-fast fallback: 100ms hard limit
+                info = self.engine.analyse(
+                    board, 
+                    chess.engine.Limit(time=0.1)  # 100ms hard limit
+                )
+            else:
+                # Traditional mode: use full depth with time limit
+                info = self.engine.analyse(
+                    board, 
+                    chess.engine.Limit(depth=self.engine_depth, time=self.time_limit)
+                )
+            
             score = info.get('score')
             if score:
                 # Get score relative to side to move
@@ -589,6 +621,12 @@ class MistakeAnalysisService:
                     )
             
             logger.info(f"Mistake analysis complete: {len(games_data)} games analyzed")
+            
+            # Log Lichess API statistics (Iteration 11)
+            if self.use_lichess_cloud and self.lichess_service:
+                stats = self.lichess_service.get_stats()
+                logger.info(f"Lichess API performance: {stats['hits']} hits, {stats['misses']} misses, "
+                          f"{stats['errors']} errors ({stats['hit_rate']:.1f}% hit rate)")
             
         except Exception as e:
             logger.error(f"Error in aggregate analysis: {e}")

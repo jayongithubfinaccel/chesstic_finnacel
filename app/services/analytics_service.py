@@ -47,7 +47,8 @@ class AnalyticsService:
     
     def __init__(self, stockfish_path: str = 'stockfish', engine_depth: int = 12,
                  engine_enabled: bool = True, openai_api_key: str = '',
-                 openai_model: str = 'gpt-4o-mini'):
+                 openai_model: str = 'gpt-4o-mini', use_lichess_cloud: bool = True,
+                 lichess_timeout: float = 5.0, engine_time_limit: float = 0.2):
         """
         Initialize analytics service.
         
@@ -57,11 +58,17 @@ class AnalyticsService:
             engine_enabled: Whether to enable engine analysis
             openai_api_key: OpenAI API key for AI advisor
             openai_model: OpenAI model to use
+            use_lichess_cloud: Whether to use Lichess Cloud API (default: True, Iteration 11)
+            lichess_timeout: Lichess API timeout in seconds (default: 5.0)
+            engine_time_limit: Stockfish time limit in seconds (default: 0.2, optimized in Iteration 11)
         """
         self.mistake_analyzer = MistakeAnalysisService(
             stockfish_path=stockfish_path,
             engine_depth=engine_depth,
-            enabled=engine_enabled
+            time_limit=engine_time_limit,
+            enabled=engine_enabled,
+            use_lichess_cloud=use_lichess_cloud,
+            lichess_timeout=lichess_timeout
         )
         self.ai_advisor = ChessAdvisorService(
             api_key=openai_api_key,
