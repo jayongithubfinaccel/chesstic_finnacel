@@ -34,17 +34,28 @@ class Config:
     OPENAI_TEMPERATURE = 0.7
     
     # Lichess Cloud API settings (Milestone 8 Optimization - Iteration 11)
-    USE_LICHESS_CLOUD = os.environ.get('USE_LICHESS_CLOUD', 'True').lower() == 'true'
+    # Iteration 12: Default changed to False (Lichess timeouts make it slower)
+    USE_LICHESS_CLOUD = os.environ.get('USE_LICHESS_CLOUD', 'False').lower() == 'true'
     LICHESS_API_TIMEOUT = float(os.environ.get('LICHESS_API_TIMEOUT', '1.0'))  # 1s timeout for fast failover (Iteration 11)
     
     # Stockfish engine settings (Milestone 8: Mistake Analysis - fallback for Lichess)
     STOCKFISH_PATH = os.environ.get('STOCKFISH_PATH', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'stockfish.exe'))
     ENGINE_ANALYSIS_ENABLED = os.environ.get('ENGINE_ANALYSIS_ENABLED', 'True').lower() == 'true'
+    
+    # Iteration 12: Node-limited search for predictable timing
+    ENGINE_NODES = int(os.environ.get('ENGINE_NODES', '50000'))  # Node-limited search (replaces depth/time reliance)
+    
+    # Backward compatibility: Keep depth/time settings (used when ENGINE_NODES not set or 0)
     ENGINE_DEPTH = int(os.environ.get('ENGINE_DEPTH', '8'))  # Reduced to 8 for faster fallback (Iteration 11)
     ENGINE_TIME_LIMIT = float(os.environ.get('ENGINE_TIME_LIMIT', '0.2'))  # Reduced to 0.2s for faster fallback (Iteration 11)
     
+    # Iteration 12: Analysis scope reduction for low-resource servers
+    MAX_ANALYSIS_GAMES = int(os.environ.get('MAX_ANALYSIS_GAMES', '10'))  # Cap on games analyzed
+    MOVES_PER_GAME = int(os.environ.get('MOVES_PER_GAME', '15'))  # Moves per game (5 early + 5 mid + 5 end)
+    
     # Mistake Analysis UI visibility (Iteration 11.1)
-    MISTAKE_ANALYSIS_UI_ENABLED = os.environ.get('MISTAKE_ANALYSIS_UI_ENABLED', 'False').lower() == 'true'  # Default: False (hidden)
+    # Iteration 12: Re-enabled by default with faster analysis
+    MISTAKE_ANALYSIS_UI_ENABLED = os.environ.get('MISTAKE_ANALYSIS_UI_ENABLED', 'True').lower() == 'true'
     
     # Google Analytics & Tag Manager settings (Iteration 11)
     GTM_ENABLED = os.environ.get('GTM_ENABLED', 'True').lower() == 'true'

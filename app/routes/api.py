@@ -260,11 +260,14 @@ def analyze_detailed():
                 stockfish_path=config.get('STOCKFISH_PATH', 'stockfish'),
                 engine_depth=config.get('ENGINE_DEPTH', 8),
                 engine_time_limit=config.get('ENGINE_TIME_LIMIT', 0.2),
+                engine_nodes=config.get('ENGINE_NODES', 50000),  # Iteration 12
                 engine_enabled=config.get('ENGINE_ANALYSIS_ENABLED', True) and include_mistake_analysis,
                 openai_api_key=config.get('OPENAI_API_KEY', ''),
                 openai_model=config.get('OPENAI_MODEL', 'gpt-4o-mini'),
                 use_lichess_cloud=config.get('USE_LICHESS_CLOUD', True),
-                lichess_timeout=config.get('LICHESS_API_TIMEOUT', 5.0)
+                lichess_timeout=config.get('LICHESS_API_TIMEOUT', 5.0),
+                max_analysis_games=config.get('MAX_ANALYSIS_GAMES', 10),  # Iteration 12
+                moves_per_game=config.get('MOVES_PER_GAME', 15)  # Iteration 12
             )
             
             # Format date range for AI advisor context

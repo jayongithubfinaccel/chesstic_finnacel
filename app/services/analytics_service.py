@@ -48,27 +48,35 @@ class AnalyticsService:
     def __init__(self, stockfish_path: str = 'stockfish', engine_depth: int = 12,
                  engine_enabled: bool = True, openai_api_key: str = '',
                  openai_model: str = 'gpt-4o-mini', use_lichess_cloud: bool = True,
-                 lichess_timeout: float = 5.0, engine_time_limit: float = 0.2):
+                 lichess_timeout: float = 5.0, engine_time_limit: float = 0.2,
+                 engine_nodes: int = 50000, max_analysis_games: int = 10,
+                 moves_per_game: int = 15):
         """
         Initialize analytics service.
         
         Args:
             stockfish_path: Path to Stockfish executable
-            engine_depth: Engine analysis depth (default: 12 in PRD v2.2)
+            engine_depth: Engine analysis depth (default: 12, used only if engine_nodes=0)
             engine_enabled: Whether to enable engine analysis
             openai_api_key: OpenAI API key for AI advisor
             openai_model: OpenAI model to use
             use_lichess_cloud: Whether to use Lichess Cloud API (default: True, Iteration 11)
             lichess_timeout: Lichess API timeout in seconds (default: 5.0)
-            engine_time_limit: Stockfish time limit in seconds (default: 0.2, optimized in Iteration 11)
+            engine_time_limit: Stockfish time limit in seconds (default: 0.2, used only if engine_nodes=0)
+            engine_nodes: Node limit for Stockfish (default: 50000, Iteration 12)
+            max_analysis_games: Maximum games to analyze (default: 10, Iteration 12)
+            moves_per_game: Moves to analyze per game (default: 15, Iteration 12)
         """
         self.mistake_analyzer = MistakeAnalysisService(
             stockfish_path=stockfish_path,
             engine_depth=engine_depth,
             time_limit=engine_time_limit,
+            engine_nodes=engine_nodes,
             enabled=engine_enabled,
             use_lichess_cloud=use_lichess_cloud,
-            lichess_timeout=lichess_timeout
+            lichess_timeout=lichess_timeout,
+            max_analysis_games=max_analysis_games,
+            moves_per_game=moves_per_game
         )
         self.ai_advisor = ChessAdvisorService(
             api_key=openai_api_key,

@@ -1,4 +1,4 @@
-# PRD: Enhanced Chess Analytics Dashboard (v2.10)
+# PRD: Enhanced Chess Analytics Dashboard (v2.11)
 
 ## Project overview
 
@@ -27,6 +27,238 @@ The system will fetch game data from the Chess.com Public API, process and analy
 # PRD change history
 
 This section tracks all iterations and modifications to the PRD document. Engineers should review this section to understand the latest changes and their context.
+
+## Iteration 12 - February 27, 2026
+
+**Version:** 2.11  
+**Focus:** Stockfish performance optimization for low-resource server (1 vCPU DigitalOcean droplet)
+
+### Context
+
+**Server environment:** DigitalOcean droplet (1 vCPU, 1 GB RAM, 10 GB disk, Ubuntu 25.04, SGP1 region)
+
+**Problem:** 
+- Lichess Cloud API was supposed to speed up analysis but frequently times out (SSL handshake failures, network latency)
+- When Lichess times out, time is wasted on the timeout + still falls back to Stockfish → slower than pure Stockfish
+- Current analysis: ~45-60 seconds per game, ~20-30 minutes for 30 games
+- Production server has only 1 vCPU → parallel Stockfish workers are not feasible
+- Previous iteration's Stockfish settings (depth=15, time=2.0s) are too heavy for 1 vCPU
+
+**Goal:** Achieve **~3 seconds per game, ~30 seconds for 10 games** through Stockfish-only optimizations on single-core hardware.
+
+### Changes Summary
+
+**Change 1 - Disable Lichess Cloud API by Default (Configuration):**
+- **Changed:** Default `USE_LICHESS_CLOUD=false` (was `true`)
+  - **Rationale:** API timeouts make Lichess slower than pure Stockfish in practice
+  - **Keep toggle:** Lichess code stays intact, users can re-enable on servers with good connectivity
+  - **Impact:** Eliminates wasted timeout latency, pure Stockfish path is predictable
+
+**Change 2 - Node-Limited Search Instead of Depth/Time (EA-022 Optimization):**
+- **Switched:** From `depth=15, time=2.0s` to `nodes=50000` for Stockfish evaluation
+  - **Problem:** Depth-based search has unpredictable timing (simple positions = fast, complex = very slow)
+  - **Problem:** Time-based limits still have UCI communication overhead (~1s per call)
+  - **Solution:** Node-limited search (`go nodes 50000`) provides predictable ~0.05-0.1s per position
+  - **Accuracy:** 50K nodes is sufficient for blunder/mistake detection (≥50cp loss threshold)
+- **Implementation:**
+  - New config: `ENGINE_NODES=50000` (replaces reliance on `ENGINE_DEPTH` and `ENGINE_TIME_LIMIT`)
+  - `engine.analyse(board, chess.engine.Limit(nodes=50000))`
+  - Eliminates depth/time variability, consistent throughput on any hardware
+- **Benefits:**
+  - ✅ **Predictable timing:** ~0.05-0.1s per eval regardless of position complexity
+  - ✅ **No UCI overhead waste:** Node limit is precise (vs depth which may overshoot time)
+  - ✅ **1 vCPU friendly:** Low resource usage per evaluation
+  - ✅ **Sufficient accuracy:** Catches blunders and mistakes at 50K nodes
+- **Configuration:**
+  - New setting: `ENGINE_NODES=50000` (node limit per evaluation)
+  - Existing `ENGINE_DEPTH` and `ENGINE_TIME_LIMIT` kept for backward compatibility
+
+**Change 3 - Pre-collect FENs and Batch Evaluate (EA-023 Optimization):**
+- **Refactored:** Move analysis from interleaved (evaluate → move → evaluate) to batch approach
+  - **Step 1:** Single pass through PGN to collect all needed FEN positions
+  - **Step 2:** Deduplicate positions (transpositions, repeated positions)
+  - **Step 3:** Evaluate all unique positions in one batch
+  - **Step 4:** Look up results to compute move quality
+- **Benefits:**
+  - ✅ **Eliminates duplicate evaluations:** Transpositions evaluated once
+  - ✅ **Cleaner code:** Separation of FEN collection and evaluation
+  - ✅ **Cache-friendly:** All evaluations in tight loop, no context switching
+  - ✅ **~10-20% fewer evaluations** from deduplication
+
+**Change 4 - Reduced Analysis Scope (EA-024 Optimization):**
+- **Reduced:** From 30 moves/game to **15 moves/game** with strategic selection
+  - **Move selection:** 5 early (moves 1-15) + 5 middle (moves 16-30) + 5 endgame (moves 31+)
+  - **Within each stage:** Evenly spaced (e.g., if 20 moves in early, pick moves at indices 0, 4, 8, 12, 16)
+  - **Redistribution:** If a stage has fewer than 5 moves, redistribute slots to other stages
+- **Reduced:** Game sample from all/<50 / 20%/>50 to **max 10 games**
+  - Under 10 games: Analyze all
+  - 10+ games: Pick 10 evenly distributed across the time period
+- **Configuration:**
+  - New setting: `MAX_ANALYSIS_GAMES=10` (cap on games analyzed)
+  - New setting: `MOVES_PER_GAME=15` (total moves analyzed per game)
+- **Benefits:**
+  - ✅ **~50% fewer evaluations per game** (15 vs 30 moves × 2 evals = 30 vs 60)
+  - ✅ **Capped total work:** Max 10 games × 30 evaluations = 300 evaluations total
+  - ✅ **Still representative:** Covers all 3 game stages evenly
+  - ✅ **Predictable worst case:** 300 evals × 0.1s = ~30 seconds maximum
+
+**Change 5 - Progressive UI (EA-025 UX Enhancement):**
+- **Added:** Incremental result rendering as each game finishes analysis
+  - **Problem:** Users wait for all games to complete before seeing any results (30s-30min black box)
+  - **Solution:** Stream/poll results after each game completes, update UI progressively
+- **Implementation:**
+  - Backend: API returns results per game as they complete (polling-based)
+  - Frontend: JavaScript polls for progress, renders partial results incrementally
+  - Loading state shows: "Analyzing game 3 of 10..." with per-game progress
+  - Summary cards and table update live as more data arrives
+- **Benefits:**
+  - ✅ **First results in ~3-5 seconds** (after first game completes)
+  - ✅ **User engagement:** Active progress instead of spinner
+  - ✅ **Perception of speed:** Users see useful data immediately
+  - ✅ **Cancel-friendly:** User can navigate away and data already rendered is visible
+
+**Change 6 - Linux Stockfish Deployment (EA-026 Infrastructure):**
+- **Added:** Stockfish installation for Ubuntu/Linux DigitalOcean droplet
+  - **Method:** `apt install stockfish` (packages available for Ubuntu 25.04)
+  - **Binary size:** ~5MB, well within 10GB disk limit
+  - **Path:** `/usr/games/stockfish`
+  - **Updated:** `deploy.sh` to include Stockfish installation and verification
+- **Configuration:**
+  - Server `.env`: `STOCKFISH_PATH=/usr/games/stockfish`
+  - Local `.env`: `STOCKFISH_PATH=C:\stockfish\stockfish-windows-x86-64-avx2`
+
+### Performance Targets
+
+**Per Game Analysis (1 vCPU server):**
+- Moves analyzed: **15** (5 early + 5 middle + 5 endgame)
+- Evaluations per game: **~30** (2 per move: before + after)
+- Time per evaluation: **~0.05-0.1s** (node-limited at 50K nodes)
+- **Expected time per game: ~3 seconds**
+
+**Total Analysis (10 games max):**
+- Total evaluations: **~300** (10 games × 30 evals)
+- **Expected total time: ~30 seconds**
+- First result visible: **~3-5 seconds** (progressive UI)
+
+**Comparison with Previous Iterations:**
+
+| Metric | Iteration 10 (baseline) | Iteration 11 (Lichess) | Iteration 12 (optimized) |
+|---|---|---|---|
+| Moves per game | 30 | 30 | **15** |
+| Max games | All/20% | All/20% | **10** |
+| Eval method | depth=15 | Lichess + depth=1 | **nodes=50K** |
+| Time per eval | ~1-2s | 0.03s-1s (variable) | **~0.1s** |
+| Time per game | ~45-60s | ~45-50s | **~3s** |
+| Total (10 games) | ~7-10 min | ~7-8 min | **~30s** |
+| First result | After all done | After all done | **~3-5s** |
+
+### Technical Impact
+
+**Modified Files:**
+- `app/services/mistake_analysis_service.py` - Node-limited search, FEN batching, reduced scope, progressive callbacks
+- `app/routes/api.py` - Progressive result streaming/polling endpoint
+- `config.py` - New configuration variables (ENGINE_NODES, MAX_ANALYSIS_GAMES, MOVES_PER_GAME)
+- `static/js/analytics.js` - Progressive UI rendering with polling
+- `templates/analytics.html` - Progressive loading indicators
+- `.env` / `.env.example` - Updated defaults
+- `deploy.sh` - Add Stockfish Linux installation and verification
+
+**Configuration Changes:**
+```bash
+# .env updates for Iteration 12
+USE_LICHESS_CLOUD=false              # Default off (enable if server has good Lichess connectivity)
+ENGINE_NODES=50000                   # Node-limited search (predictable timing)
+MAX_ANALYSIS_GAMES=10                # Cap on games analyzed
+MOVES_PER_GAME=15                    # Moves per game (5 early + 5 mid + 5 end)
+MISTAKE_ANALYSIS_UI_ENABLED=true     # Re-enable with faster analysis
+
+# Server-specific (DigitalOcean Ubuntu)
+STOCKFISH_PATH=/usr/games/stockfish  # Linux path
+```
+
+### Testing Strategy
+
+**Phase 1: Unit Tests**
+- Test node-limited Stockfish evaluation
+- Test FEN pre-collection and deduplication
+- Test 15-move selection (5+5+5 per stage with redistribution)
+- Test game selection (max 10 games, evenly distributed)
+- Test progressive callback mechanism
+
+**Phase 2: Integration Tests**
+- Test full analysis pipeline with node limit
+- Test progressive UI polling/streaming
+- Test with various game lengths (short, normal, long games)
+- Test stage redistribution edge cases (e.g., 10-move game)
+
+**Phase 3: Performance Tests**
+- **Critical:** Verify ≤3 seconds per game on 1 vCPU
+- **Critical:** Verify ≤30 seconds total for 10 games
+- Test Stockfish memory usage stays under 100MB
+- Verify progressive UI shows first result in ≤5 seconds
+
+**Phase 4: Production Verification**
+- Deploy to DigitalOcean droplet
+- Run Stockfish verification (`stockfish` binary works)
+- Test full analysis cycle on production server
+- Monitor RAM usage (must stay under 1 GB total)
+- Verify progressive UI works end-to-end
+
+### Deployment Notes
+
+**Pre-deployment checklist:**
+- [ ] Run `deploy.sh` which now includes Stockfish installation
+- [ ] Verify Stockfish works: `stockfish <<< "uci"` should show engine info
+- [ ] Update `.env` with Iteration 12 configuration
+- [ ] Run unit tests on server
+- [ ] Test analysis with a real Chess.com username
+
+**Server deployment steps:**
+```bash
+# 1. SSH into server
+ssh root@159.65.140.136
+
+# 2. Pull latest code
+cd /var/www/chesstic
+git pull origin main
+
+# 3. Run deploy script (installs Stockfish + dependencies)
+sudo bash deploy.sh
+
+# 4. Verify Stockfish installation
+stockfish <<< "uci"
+which stockfish  # Should show /usr/games/stockfish
+
+# 5. Update .env
+nano /var/www/chesstic/.env
+# Add: STOCKFISH_PATH=/usr/games/stockfish
+# Add: ENGINE_NODES=50000
+# Add: MAX_ANALYSIS_GAMES=10
+# Add: MOVES_PER_GAME=15
+# Add: MISTAKE_ANALYSIS_UI_ENABLED=true
+# Set: USE_LICHESS_CLOUD=false
+
+# 6. Restart service
+sudo systemctl restart chesstic
+
+# 7. Verify
+curl http://localhost:8000/analytics
+```
+
+**Rollback plan:**
+- Revert `ENGINE_NODES` to use `ENGINE_DEPTH=15, ENGINE_TIME_LIMIT=2.0` (previous behavior)
+- Set `MAX_ANALYSIS_GAMES` to a high number (e.g., 999) to restore old sampling
+- Set `MOVES_PER_GAME=30` to restore old move count
+- No code rollback required for config-driven changes
+
+### Documentation Updates
+- [ ] Create `iteration_12_summary.md` with complete implementation details
+- [ ] Updated PRD version from 2.10 to 2.11
+- [ ] Added Iteration 12 changelog entry
+- [ ] Updated `deploy.sh` with Stockfish Linux installation
+- [ ] Update `DEPLOYMENT_GUIDE.md` with new environment variables
+
+---
 
 ## Iteration 11 - February 26, 2026
 

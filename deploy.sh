@@ -51,7 +51,49 @@ print_error() {
 # Step 1: Install system dependencies
 print_step "Step 1: Installing system dependencies..."
 apt-get update
-apt-get install -y python3 python3-pip python3-venv nginx git stockfish curl
+apt-get install -y python3 python3-pip python3-venv nginx git curl
+print_success "System dependencies installed"
+
+# Step 1b: Install Stockfish chess engine
+print_step "Step 1b: Installing Stockfish chess engine..."
+if command -v stockfish &> /dev/null; then
+    STOCKFISH_VERSION=$(stockfish <<< "uci" 2>/dev/null | head -1)
+    print_success "Stockfish already installed: ${STOCKFISH_VERSION}"
+else
+    apt-get install -y stockfish
+    if command -v stockfish &> /dev/null; then
+        STOCKFISH_VERSION=$(stockfish <<< "uci" 2>/dev/null | head -1)
+        print_success "Stockfish installed: ${STOCKFISH_VERSION}"
+    else
+        print_error "Stockfish installation failed via apt"
+        print_step "Attempting manual Stockfish installation..."
+        # Fallback: download from official source
+        STOCKFISH_URL="https://github.com/official-stockfish/Stockfish/releases/latest/download/stockfish-ubuntu-x86-64-avx2.tar"
+        cd /tmp
+        curl -LO ${STOCKFISH_URL} 2>/dev/null || curl -LO "https://github.com/official-stockfish/Stockfish/releases/latest/download/stockfish-ubuntu-x86-64.tar" 2>/dev/null
+        if [ -f stockfish-ubuntu-*.tar ]; then
+            tar xf stockfish-ubuntu-*.tar
+            cp stockfish/stockfish-ubuntu-* /usr/local/bin/stockfish
+            chmod +x /usr/local/bin/stockfish
+            rm -rf stockfish stockfish-ubuntu-*.tar
+            print_success "Stockfish installed manually to /usr/local/bin/stockfish"
+        else
+            print_error "Failed to download Stockfish. Please install manually."
+            echo "  Visit: https://stockfishchess.org/download/"
+        fi
+        cd ${APP_DIR}
+    fi
+fi
+
+# Verify Stockfish
+STOCKFISH_PATH=$(which stockfish 2>/dev/null)
+if [ -n "${STOCKFISH_PATH}" ]; then
+    print_success "Stockfish binary: ${STOCKFISH_PATH}"
+    # Quick engine test
+    echo "quit" | stockfish > /dev/null 2>&1 && print_success "Stockfish engine responds correctly" || print_error "Stockfish engine test failed"
+else
+    print_error "Stockfish not found in PATH. Mistake analysis will not work."
+fi
 
 # Install UV package manager
 if ! command -v uv &> /dev/null; then
@@ -59,7 +101,7 @@ if ! command -v uv &> /dev/null; then
     curl -LsSf https://astral.sh/uv/install.sh | sh
     export PATH="$HOME/.cargo/bin:$PATH"
 fi
-print_success "System dependencies installed"
+print_success "All dependencies installed"
 
 # Step 2: Stop existing service
 print_step "Step 2: Stopping existing service (if running)..."
@@ -97,7 +139,10 @@ else
         print_success ".env file created from template"
         echo -e "${YELLOW}⚠  Please edit ${APP_DIR}/.env with your configuration${NC}"
     else
-        # Create a basic .env file
+        # Detect Stockfish path
+        DETECTED_STOCKFISH=$(which stockfish 2>/dev/null || echo "/usr/games/stockfish")
+        
+        # Create a production .env file
         cat > ${APP_DIR}/.env << EOL
 # Flask Configuration
 FLASK_ENV=production
@@ -111,17 +156,41 @@ CORS_ORIGINS=http://159.65.140.136,http://chesstic.com
 RATE_LIMIT_ENABLED=True
 RATE_LIMIT_PER_MINUTE=30
 
-# OpenAI API Configuration
+# OpenAI API Configuration (Milestone 9: AI Chess Advisor)
 OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_MODEL=gpt-4o-mini
+OPENAI_MAX_TOKENS=500
+OPENAI_TEMPERATURE=0.7
 
-# Stockfish Configuration
-STOCKFISH_PATH=/usr/games/stockfish
+# Stockfish Configuration (Milestone 8 + Iteration 12)
+STOCKFISH_PATH=${DETECTED_STOCKFISH}
 ENGINE_ANALYSIS_ENABLED=True
-ENGINE_DEPTH=12
-ENGINE_TIME_LIMIT=1.5
+ENGINE_NODES=50000
+ENGINE_DEPTH=15
+ENGINE_TIME_LIMIT=2.0
+
+# Iteration 12: Analysis Scope
+MAX_ANALYSIS_GAMES=10
+MOVES_PER_GAME=15
+
+# Iteration 11: Lichess Cloud API (disabled by default for reliability)
+USE_LICHESS_CLOUD=false
+LICHESS_API_TIMEOUT=1.0
+
+# Iteration 11.1: Mistake Analysis UI Control
+MISTAKE_ANALYSIS_UI_ENABLED=true
+
+# Cache Settings
+AI_ADVICE_CACHE_TTL=3600
+
+# Google Analytics & Tag Manager Configuration (Iteration 11)
+GTM_ENABLED=true
+GTM_CONTAINER_ID=GT-NFBTKHBS
+GA_MEASUREMENT_ID=G-VMYYSZC29R
 EOL
-        print_success "Basic .env file created"
+        print_success "Production .env file created with Iteration 12 defaults"
         echo -e "${YELLOW}⚠  Please edit ${APP_DIR}/.env with your OPENAI_API_KEY and other settings${NC}"
+        echo -e "${YELLOW}⚠  Stockfish path auto-detected: ${DETECTED_STOCKFISH}${NC}"
     fi
 fi
 
@@ -272,7 +341,14 @@ echo "  • Check status: sudo systemctl status ${SERVICE_NAME}"
 echo "  • Restart Nginx: sudo systemctl restart nginx"
 echo ""
 echo -e "${YELLOW}⚠  Remember to:${NC}"
-echo "  1. Edit ${APP_DIR}/.env with your API keys"
+echo "  1. Edit ${APP_DIR}/.env with your API keys (especially OPENAI_API_KEY)"
 echo "  2. Restart the service after updating .env: sudo systemctl restart ${SERVICE_NAME}"
 echo "  3. Configure your domain DNS if needed"
+echo ""
+echo "Stockfish Configuration (Iteration 12):"
+echo "  • Stockfish path: $(which stockfish 2>/dev/null || echo 'NOT FOUND')"
+echo "  • Engine nodes: 50000 (node-limited search)"
+echo "  • Max analysis games: 10"
+echo "  • Moves per game: 15 (5 early + 5 mid + 5 end)"
+echo "  • Lichess Cloud API: disabled (set USE_LICHESS_CLOUD=true to enable)"
 echo ""

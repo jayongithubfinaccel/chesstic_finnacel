@@ -3,6 +3,7 @@ Mistake analysis service using Stockfish engine for game evaluation.
 Milestone 8: Game Stage Mistake Analysis
 PRD v2.1: Updated critical mistake game link criteria (lost by resignation only)
 PRD v2.10 (Iteration 11): Lichess Cloud API integration for 10-20x performance improvement
+PRD v2.11 (Iteration 12): Node-limited search + batch FEN evaluation for 1 vCPU optimization
 """
 import chess
 import chess.engine
@@ -32,31 +33,37 @@ class MistakeAnalysisService:
     EARLY_STOP_THRESHOLD = 300  # Skip detailed analysis for blunders >300 CP
     SKIP_EVAL_THRESHOLD = 600   # Skip analyzing heavily winning/losing positions
     
-    # Strategic move sampling (February 18, 2026)
-    FIRST_MOVES_TO_ANALYZE = 10   # Always analyze first 10 moves (opening)
-    LAST_MOVES_TO_ANALYZE = 10    # Always analyze last 10 moves (endgame)
-    MIDDLE_MOVES_TO_ANALYZE = 10  # Sample 10 moves from middle game
-    MAX_MOVES_PER_GAME = 30       # Maximum moves to analyze per game
+    # Strategic move sampling (Iteration 12: Reduced to 15 moves for 1 vCPU)
+    # 5 early + 5 middle + 5 endgame = 15 moves per game
+    MOVES_PER_STAGE = 5           # Moves to analyze per stage
+    MAX_MOVES_PER_GAME = 15       # Maximum moves to analyze per game (3 stages × 5)
     
     def __init__(self, stockfish_path: str = 'stockfish', engine_depth: int = 10, 
-                 time_limit: float = 0.5, enabled: bool = True, use_lichess_cloud: bool = True,
-                 lichess_timeout: float = 5.0):
+                 time_limit: float = 0.5, engine_nodes: int = 50000, enabled: bool = True, 
+                 use_lichess_cloud: bool = True, lichess_timeout: float = 5.0,
+                 max_analysis_games: int = 10, moves_per_game: int = 15):
         """
         Initialize mistake analysis service.
         
         Args:
             stockfish_path: Path to Stockfish executable
-            engine_depth: Analysis depth (default: 10, balanced for sampled moves in v2.3)
-            time_limit: Time limit per position in seconds (default: 0.5s in v2.3)
+            engine_depth: Analysis depth (default: 10, used only if engine_nodes=0)
+            time_limit: Time limit per position in seconds (default: 0.5s, used only if engine_nodes=0)
+            engine_nodes: Node limit for Stockfish (default: 50000, Iteration 12). Set to 0 to use depth/time.
             enabled: Whether engine analysis is enabled
             use_lichess_cloud: Whether to use Lichess Cloud API first (default: True, v2.10)
             lichess_timeout: Timeout for Lichess API calls in seconds (default: 5.0)
+            max_analysis_games: Maximum games to analyze (default: 10, Iteration 12)
+            moves_per_game: Moves to analyze per game (default: 15, Iteration 12)
         """
         self.stockfish_path = stockfish_path
         self.engine_depth = engine_depth
         self.time_limit = time_limit
+        self.engine_nodes = engine_nodes  # Iteration 12: Node-limited search
         self.enabled = enabled
         self.use_lichess_cloud = use_lichess_cloud
+        self.max_analysis_games = max_analysis_games  # Iteration 12
+        self.moves_per_game = moves_per_game  # Iteration 12
         self.engine = None
         
         # Initialize Lichess Cloud service (Iteration 11)
@@ -124,7 +131,7 @@ class MistakeAnalysisService:
     def _evaluate_position(self, board: chess.Board) -> Optional[int]:
         """
         Evaluate position using Lichess Cloud API with Stockfish fallback.
-        PRD v2.10 (Iteration 11): Hybrid approach for 10-20x performance improvement.
+        PRD v2.11 (Iteration 12): Added node-limited search for predictable timing on 1 vCPU.
         
         Args:
             board: Chess board position
@@ -146,17 +153,21 @@ class MistakeAnalysisService:
             return None
             
         try:
-            # Use strict time limit for ultra-fast fallback when Lichess enabled (Iteration 11)
-            # When Lichess is handling 60-80% of positions, fallback accuracy is less critical
-            # movetime=100ms provides hard cutoff (vs depth which ignores time)
-            if self.use_lichess_cloud:
-                # Ultra-fast fallback: 100ms hard limit
+            # Iteration 12: Node-limited search for predictable timing (~0.05-0.1s per position)
+            if self.engine_nodes > 0:
+                # Node-limited search: 50K nodes = consistent ~0.1s timing
+                info = self.engine.analyse(
+                    board, 
+                    chess.engine.Limit(nodes=self.engine_nodes)
+                )
+            elif self.use_lichess_cloud:
+                # Ultra-fast fallback when Lichess is primary: 100ms hard limit
                 info = self.engine.analyse(
                     board, 
                     chess.engine.Limit(time=0.1)  # 100ms hard limit
                 )
             else:
-                # Traditional mode: use full depth with time limit
+                # Traditional mode: use depth with time limit
                 info = self.engine.analyse(
                     board, 
                     chess.engine.Limit(depth=self.engine_depth, time=self.time_limit)
@@ -175,7 +186,8 @@ class MistakeAnalysisService:
     def _select_moves_to_analyze(self, total_player_moves: int) -> set:
         """
         Select which move indices to analyze using strategic sampling.
-        PRD v2.3: First 10, last 10, middle 10 (max 30 total).
+        PRD v2.11 (Iteration 12): 5 early + 5 middle + 5 endgame = 15 moves per game.
+        Redistributes unused moves when game is too short.
         
         Args:
             total_player_moves: Total number of player moves in the game
@@ -185,32 +197,52 @@ class MistakeAnalysisService:
         """
         moves_to_analyze = set()
         
-        # If game has <= 30 moves, analyze all
-        if total_player_moves <= self.MAX_MOVES_PER_GAME:
+        # If game has <= 15 moves, analyze all
+        if total_player_moves <= self.moves_per_game:
             return set(range(total_player_moves))
         
-        # First 10 moves (opening)
-        first_moves = min(self.FIRST_MOVES_TO_ANALYZE, total_player_moves)
-        moves_to_analyze.update(range(first_moves))
+        # Calculate stage boundaries (early: 0-33%, middle: 33-66%, end: 66-100%)
+        early_end = total_player_moves // 3
+        middle_end = 2 * total_player_moves // 3
         
-        # Last 10 moves (endgame)
-        last_moves = min(self.LAST_MOVES_TO_ANALYZE, total_player_moves)
-        moves_to_analyze.update(range(total_player_moves - last_moves, total_player_moves))
+        # Early game: First 5 moves (or all if less than 5)
+        early_moves = min(self.MOVES_PER_STAGE, early_end)
+        early_selected = set(range(early_moves))
         
-        # Middle 10 moves (sample evenly from remaining positions)
-        # Exclude first 10 and last 10
-        middle_start = self.FIRST_MOVES_TO_ANALYZE
-        middle_end = total_player_moves - self.LAST_MOVES_TO_ANALYZE
-        middle_range = middle_end - middle_start
+        # Endgame: Last 5 moves (or all if less than 5 remaining)
+        endgame_moves = min(self.MOVES_PER_STAGE, total_player_moves - middle_end)
+        endgame_selected = set(range(total_player_moves - endgame_moves, total_player_moves))
         
-        if middle_range > 0:
-            # Sample evenly across middle game
-            moves_to_sample = min(self.MIDDLE_MOVES_TO_ANALYZE, middle_range)
-            if moves_to_sample > 0:
-                step = middle_range / moves_to_sample
-                for i in range(moves_to_sample):
-                    move_idx = middle_start + int(i * step)
-                    moves_to_analyze.add(move_idx)
+        # Middle game: Sample 5 moves evenly from middle section
+        middle_range = middle_end - early_end
+        middle_moves = min(self.MOVES_PER_STAGE, middle_range)
+        middle_selected = set()
+        
+        if middle_moves > 0 and middle_range > 0:
+            step = middle_range / middle_moves
+            for i in range(middle_moves):
+                move_idx = early_end + int(i * step)
+                middle_selected.add(move_idx)
+        
+        # Combine all selections
+        moves_to_analyze.update(early_selected)
+        moves_to_analyze.update(middle_selected)
+        moves_to_analyze.update(endgame_selected)
+        
+        # Redistribution: If we have fewer than 15 moves, fill from under-sampled stages
+        if len(moves_to_analyze) < self.moves_per_game:
+            remaining_slots = self.moves_per_game - len(moves_to_analyze)
+            
+            # Find moves not yet selected
+            all_moves = set(range(total_player_moves))
+            unselected = all_moves - moves_to_analyze
+            
+            # Add evenly from unselected moves
+            if unselected:
+                unselected_list = sorted(unselected)
+                step = len(unselected_list) / min(remaining_slots, len(unselected_list))
+                for i in range(min(remaining_slots, len(unselected_list))):
+                    moves_to_analyze.add(unselected_list[int(i * step)])
         
         return moves_to_analyze
     
@@ -468,15 +500,14 @@ class MistakeAnalysisService:
         
         username_lower = username.lower()
         
-        # Iteration 5: Dynamic sampling logic
-        # <50 games: Analyze all games
-        # ≥50 games: Analyze 20% sample (time-distributed)
+        # Iteration 12: Simplified game selection logic
+        # Always cap at max_analysis_games (default 10) for consistent performance
         total_games = len(games_data)
-        if total_games < 50:
-            games_to_analyze = games_data  # Analyze all
+        if total_games <= self.max_analysis_games:
+            games_to_analyze = games_data  # Analyze all if under limit
         else:
-            sample_size = max(1, int(total_games * 0.20))  # 20% of games
-            games_to_analyze = self._select_games_for_analysis(games_data, max_games=sample_size)
+            # Select evenly distributed games up to max limit
+            games_to_analyze = self._select_games_for_analysis(games_data, max_games=self.max_analysis_games)
         
         aggregated['sample_info']['analyzed_games'] = len(games_to_analyze)
         if len(games_data) > 0:
@@ -484,7 +515,7 @@ class MistakeAnalysisService:
                 (len(games_to_analyze) / len(games_data)) * 100, 1
             )
         
-        logger.info(f"Iteration 5: Analyzing {len(games_to_analyze)} games out of {len(games_data)} total games ({aggregated['sample_info']['sample_percentage']}% sample)")
+        logger.info(f"Iteration 12: Analyzing {len(games_to_analyze)} games out of {len(games_data)} total games ({aggregated['sample_info']['sample_percentage']}% sample)")
         
         try:
             # Analyze selected games
