@@ -1,8 +1,18 @@
 #!/bin/bash
 
-# Chesstic Deployment Script
+# Chesstic Deployment Script (v2 - March 2026)
 # Server: 159.65.140.136
+# Domain: chesstic.org
 # Repository: https://github.com/jayongithubfinaccel/chesstic_finnacel
+#
+# Fixes from v1:
+# - UV venv symlinks now accessible by www-data (chmod /root/.local/share/)
+# - systemd PATH includes /usr/local/bin for Stockfish
+# - PID file uses RuntimeDirectory (writable by www-data)
+# - Gunicorn log directory created with correct ownership
+# - .env preserves existing production config on re-deploy
+# - Nginx configured for chesstic.org with SSL via certbot
+# - Stockfish uses absolute path in .env
 
 set -e  # Exit on any error
 
@@ -20,9 +30,10 @@ BRANCH="main"
 PYTHON_VERSION="3.12"
 VENV_DIR="${APP_DIR}/venv"
 SERVICE_NAME="chesstic"
+DOMAIN="chesstic.org"
 
 echo -e "${GREEN}========================================${NC}"
-echo -e "${GREEN}  Chesstic Deployment Script${NC}"
+echo -e "${GREEN}  Chesstic Deployment Script v2${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
 
@@ -51,7 +62,7 @@ print_error() {
 # Step 1: Install system dependencies
 print_step "Step 1: Installing system dependencies..."
 apt-get update
-apt-get install -y python3 python3-pip python3-venv nginx git curl
+apt-get install -y python3 python3-pip python3-venv nginx git curl certbot python3-certbot-nginx
 print_success "System dependencies installed"
 
 # Step 1b: Install Stockfish chess engine
@@ -67,7 +78,6 @@ else
     else
         print_error "Stockfish installation failed via apt"
         print_step "Attempting manual Stockfish installation..."
-        # Fallback: download from official source
         STOCKFISH_URL="https://github.com/official-stockfish/Stockfish/releases/latest/download/stockfish-ubuntu-x86-64-avx2.tar"
         cd /tmp
         curl -LO ${STOCKFISH_URL} 2>/dev/null || curl -LO "https://github.com/official-stockfish/Stockfish/releases/latest/download/stockfish-ubuntu-x86-64.tar" 2>/dev/null
@@ -81,16 +91,14 @@ else
             print_error "Failed to download Stockfish. Please install manually."
             echo "  Visit: https://stockfishchess.org/download/"
         fi
-        cd ${APP_DIR}
     fi
 fi
 
-# Verify Stockfish
-STOCKFISH_PATH=$(which stockfish 2>/dev/null)
-if [ -n "${STOCKFISH_PATH}" ]; then
-    print_success "Stockfish binary: ${STOCKFISH_PATH}"
-    # Quick engine test
-    echo "quit" | stockfish > /dev/null 2>&1 && print_success "Stockfish engine responds correctly" || print_error "Stockfish engine test failed"
+# Get absolute Stockfish path (critical for systemd which has limited PATH)
+DETECTED_STOCKFISH=$(which stockfish 2>/dev/null || echo "/usr/local/bin/stockfish")
+if [ -n "${DETECTED_STOCKFISH}" ]; then
+    print_success "Stockfish binary: ${DETECTED_STOCKFISH}"
+    echo "quit" | ${DETECTED_STOCKFISH} > /dev/null 2>&1 && print_success "Stockfish engine responds correctly" || print_error "Stockfish engine test failed"
 else
     print_error "Stockfish not found in PATH. Mistake analysis will not work."
 fi
@@ -112,9 +120,16 @@ else
     print_success "No existing service running"
 fi
 
-# Step 3: Backup old deployment (if exists)
+# Step 3: Preserve .env and backup old deployment
+ENV_BACKUP=""
 if [ -d "${APP_DIR}" ]; then
     print_step "Step 3: Backing up old deployment..."
+    # Preserve existing .env (contains production secrets)
+    if [ -f "${APP_DIR}/.env" ]; then
+        cp ${APP_DIR}/.env /tmp/chesstic_env_backup
+        ENV_BACKUP="/tmp/chesstic_env_backup"
+        print_success "Production .env preserved"
+    fi
     BACKUP_DIR="${APP_DIR}_backup_$(date +%Y%m%d_%H%M%S)"
     mv ${APP_DIR} ${BACKUP_DIR}
     print_success "Old deployment backed up to ${BACKUP_DIR}"
@@ -127,30 +142,31 @@ print_step "Step 4: Cloning repository..."
 mkdir -p ${APP_DIR}
 git clone -b ${BRANCH} ${REPO_URL} ${APP_DIR}
 cd ${APP_DIR}
-print_success "Repository cloned successfully"
+git config --global --add safe.directory ${APP_DIR}
+print_success "Repository cloned successfully ($(cd ${APP_DIR} && git log --oneline -1))"
 
-# Step 5: Create and setup .env file
+# Step 5: Restore or create .env file
 print_step "Step 5: Setting up environment file..."
-if [ -f "${APP_DIR}/.env" ]; then
-    print_success ".env file already exists"
+if [ -n "${ENV_BACKUP}" ] && [ -f "${ENV_BACKUP}" ]; then
+    # Restore preserved production .env
+    cp ${ENV_BACKUP} ${APP_DIR}/.env
+    rm -f ${ENV_BACKUP}
+    print_success ".env restored from previous deployment (production secrets preserved)"
+    # Update Stockfish path in case it changed
+    if grep -q "STOCKFISH_PATH=" ${APP_DIR}/.env; then
+        sed -i "s|STOCKFISH_PATH=.*|STOCKFISH_PATH=${DETECTED_STOCKFISH}|" ${APP_DIR}/.env
+        print_success "Stockfish path updated to: ${DETECTED_STOCKFISH}"
+    fi
 else
-    if [ -f "${APP_DIR}/.env.example" ]; then
-        cp ${APP_DIR}/.env.example ${APP_DIR}/.env
-        print_success ".env file created from template"
-        echo -e "${YELLOW}⚠  Please edit ${APP_DIR}/.env with your configuration${NC}"
-    else
-        # Detect Stockfish path
-        DETECTED_STOCKFISH=$(which stockfish 2>/dev/null || echo "/usr/games/stockfish")
-        
-        # Create a production .env file
-        cat > ${APP_DIR}/.env << EOL
+    # Create fresh production .env
+    cat > ${APP_DIR}/.env << EOL
 # Flask Configuration
 FLASK_ENV=production
 SECRET_KEY=$(openssl rand -hex 32)
 DEBUG=False
 
 # CORS Settings
-CORS_ORIGINS=http://159.65.140.136,http://chesstic.com
+CORS_ORIGINS=http://159.65.140.136,https://${DOMAIN},http://${DOMAIN},https://www.${DOMAIN}
 
 # Rate Limiting
 RATE_LIMIT_ENABLED=True
@@ -162,53 +178,61 @@ OPENAI_MODEL=gpt-4o-mini
 OPENAI_MAX_TOKENS=500
 OPENAI_TEMPERATURE=0.7
 
-# Stockfish Configuration (Milestone 8 + Iteration 12)
+# Stockfish Configuration (absolute path required for systemd)
 STOCKFISH_PATH=${DETECTED_STOCKFISH}
 ENGINE_ANALYSIS_ENABLED=True
 ENGINE_NODES=50000
 ENGINE_DEPTH=15
 ENGINE_TIME_LIMIT=2.0
 
-# Iteration 12: Analysis Scope
+# Analysis Scope
 MAX_ANALYSIS_GAMES=10
 MOVES_PER_GAME=15
 
-# Iteration 11: Lichess Cloud API (disabled by default for reliability)
+# Lichess Cloud API (disabled by default for reliability)
 USE_LICHESS_CLOUD=false
 LICHESS_API_TIMEOUT=1.0
 
-# Iteration 11.1: Mistake Analysis UI Control
+# Mistake Analysis UI Control
 MISTAKE_ANALYSIS_UI_ENABLED=true
 
 # Cache Settings
 AI_ADVICE_CACHE_TTL=3600
 
-# Google Analytics & Tag Manager Configuration (Iteration 11)
+# Google Analytics & Tag Manager
 GTM_ENABLED=true
 GTM_CONTAINER_ID=GT-NFBTKHBS
 GA_MEASUREMENT_ID=G-VMYYSZC29R
 EOL
-        print_success "Production .env file created with Iteration 12 defaults"
-        echo -e "${YELLOW}⚠  Please edit ${APP_DIR}/.env with your OPENAI_API_KEY and other settings${NC}"
-        echo -e "${YELLOW}⚠  Stockfish path auto-detected: ${DETECTED_STOCKFISH}${NC}"
-    fi
+    print_success "Fresh production .env created"
+    echo -e "${YELLOW}⚠  IMPORTANT: Edit ${APP_DIR}/.env with your OPENAI_API_KEY${NC}"
 fi
 
 # Step 6: Setup Python virtual environment
 print_step "Step 6: Setting up Python virtual environment..."
+
+# Create required directories BEFORE venv setup
+mkdir -p /var/log/gunicorn
+chown www-data:www-data /var/log/gunicorn
+
 if command -v uv &> /dev/null; then
-    # Use UV if available
     cd ${APP_DIR}
     uv venv ${VENV_DIR}
     source ${VENV_DIR}/bin/activate
     uv pip install -r requirements.txt
+    
+    # Fix: Make UV's Python installation accessible to www-data
+    # UV stores Python under /root/.local/share/uv/ which www-data can't access
+    if [ -d "/root/.local/share" ]; then
+        chmod 755 /root/.local/share/
+        print_success "Fixed UV Python permissions for www-data"
+    fi
 else
-    # Fallback to standard venv
     python3 -m venv ${VENV_DIR}
     source ${VENV_DIR}/bin/activate
     pip install --upgrade pip
     pip install -r ${APP_DIR}/requirements.txt
-    pip install gunicorn  # Production WSGI server
+    pip install gunicorn
 fi
 print_success "Virtual environment created and dependencies installed"
 
@@ -224,9 +248,10 @@ Type=notify
 User=www-data
 Group=www-data
 WorkingDirectory=${APP_DIR}
-Environment="PATH=${VENV_DIR}/bin"
+RuntimeDirectory=${SERVICE_NAME}
+Environment="PATH=${VENV_DIR}/bin:/usr/local/bin:/usr/bin:/bin"
 EnvironmentFile=${APP_DIR}/.env
-ExecStart=${VENV_DIR}/bin/gunicorn --config ${APP_DIR}/gunicorn_config.py run:app
+ExecStart=${VENV_DIR}/bin/gunicorn --config ${APP_DIR}/gunicorn_config.py --pid /run/${SERVICE_NAME}/${SERVICE_NAME}.pid run:app
 ExecReload=/bin/kill -s HUP \$MAINPID
 KillMode=mixed
 TimeoutStopSec=5
@@ -246,39 +271,32 @@ print_step "Step 8: Configuring Nginx..."
 cat > /etc/nginx/sites-available/${APP_NAME} << 'EOL'
 server {
     listen 80;
-    server_name 159.65.140.136;
+    server_name chesstic.org www.chesstic.org 159.65.140.136;
 
-    # Increase timeouts for long-running requests
     proxy_connect_timeout 300;
     proxy_send_timeout 300;
     proxy_read_timeout 300;
     send_timeout 300;
 
-    # Max upload size
     client_max_body_size 10M;
 
-    # Serve static files directly
     location /static {
         alias /var/www/chesstic/static;
         expires 30d;
         add_header Cache-Control "public, immutable";
     }
 
-    # Proxy to Flask application
     location / {
         proxy_pass http://127.0.0.1:8000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        
-        # WebSocket support (if needed in future)
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
     }
 
-    # Logging
     access_log /var/log/nginx/chesstic_access.log;
     error_log /var/log/nginx/chesstic_error.log;
 }
@@ -296,7 +314,7 @@ print_success "Nginx configured"
 print_step "Step 9: Setting permissions..."
 chown -R www-data:www-data ${APP_DIR}
 chmod -R 755 ${APP_DIR}
-chmod 600 ${APP_DIR}/.env  # Keep .env secure
+chmod 600 ${APP_DIR}/.env
 print_success "Permissions set"
 
 # Step 10: Start services
@@ -306,48 +324,79 @@ systemctl start ${SERVICE_NAME}
 systemctl reload nginx
 print_success "Services started"
 
-# Step 11: Verify deployment
-print_step "Step 11: Verifying deployment..."
+# Step 11: Setup SSL with certbot
+print_step "Step 11: Setting up SSL for ${DOMAIN}..."
+if [ -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ]; then
+    print_success "SSL certificate already exists for ${DOMAIN}"
+    # Re-deploy existing cert to new nginx config
+    certbot --nginx -d ${DOMAIN} -d www.${DOMAIN} --non-interactive --agree-tos --email jayson.fetra@finaccel.co --redirect 2>&1 || true
+else
+    certbot --nginx -d ${DOMAIN} -d www.${DOMAIN} --non-interactive --agree-tos --email jayson.fetra@finaccel.co --redirect 2>&1 || {
+        print_error "SSL setup failed. Site will work on HTTP only."
+        echo "  Run manually: sudo certbot --nginx -d ${DOMAIN} -d www.${DOMAIN}"
+    }
+fi
+print_success "SSL configured"
+
+# Step 12: Verify deployment
+print_step "Step 12: Verifying deployment..."
 sleep 3
+
+DEPLOY_OK=true
 
 if systemctl is-active --quiet ${SERVICE_NAME}; then
     print_success "Chesstic service is running"
 else
     print_error "Chesstic service failed to start"
     echo "Check logs with: sudo journalctl -u ${SERVICE_NAME} -n 50"
-    exit 1
+    DEPLOY_OK=false
 fi
 
 if systemctl is-active --quiet nginx; then
     print_success "Nginx is running"
 else
     print_error "Nginx failed to start"
-    exit 1
+    DEPLOY_OK=false
 fi
 
-# Final status
-echo ""
-echo -e "${GREEN}========================================${NC}"
-echo -e "${GREEN}  Deployment Completed Successfully!${NC}"
-echo -e "${GREEN}========================================${NC}"
+# Health check
+if curl -sf http://localhost:8000/api/health > /dev/null 2>&1; then
+    HEALTH=$(curl -s http://localhost:8000/api/health)
+    print_success "Health check passed: ${HEALTH}"
+else
+    print_error "Health check failed (app may still be starting)"
+fi
+
+if [ "$DEPLOY_OK" = true ]; then
+    echo ""
+    echo -e "${GREEN}========================================${NC}"
+    echo -e "${GREEN}  Deployment Completed Successfully!${NC}"
+    echo -e "${GREEN}========================================${NC}"
+else
+    echo ""
+    echo -e "${RED}========================================${NC}"
+    echo -e "${RED}  Deployment had errors - check above${NC}"
+    echo -e "${RED}========================================${NC}"
+fi
+
 echo ""
 echo "Your application is now running at:"
+echo -e "${GREEN}https://${DOMAIN}${NC}"
 echo -e "${GREEN}http://159.65.140.136${NC}"
 echo ""
 echo "Useful commands:"
-echo "  • View logs: sudo journalctl -u ${SERVICE_NAME} -f"
-echo "  • Restart app: sudo systemctl restart ${SERVICE_NAME}"
+echo "  • View logs:    sudo journalctl -u ${SERVICE_NAME} -f"
+echo "  • Restart app:  sudo systemctl restart ${SERVICE_NAME}"
 echo "  • Check status: sudo systemctl status ${SERVICE_NAME}"
+echo "  • Health check: curl https://${DOMAIN}/api/health"
 echo "  • Restart Nginx: sudo systemctl restart nginx"
 echo ""
 echo -e "${YELLOW}⚠  Remember to:${NC}"
-echo "  1. Edit ${APP_DIR}/.env with your API keys (especially OPENAI_API_KEY)"
-echo "  2. Restart the service after updating .env: sudo systemctl restart ${SERVICE_NAME}"
-echo "  3. Configure your domain DNS if needed"
+echo "  1. Edit ${APP_DIR}/.env with your OPENAI_API_KEY"
+echo "  2. Restart after .env change: sudo systemctl restart ${SERVICE_NAME}"
 echo ""
-echo "Stockfish Configuration (Iteration 12):"
-echo "  • Stockfish path: $(which stockfish 2>/dev/null || echo 'NOT FOUND')"
-echo "  • Engine nodes: 50000 (node-limited search)"
+echo "Stockfish: ${DETECTED_STOCKFISH}"
+echo "Engine nodes: 50000 (node-limited search)"
 echo "  • Max analysis games: 10"
 echo "  • Moves per game: 15 (5 early + 5 mid + 5 end)"
 echo "  • Lichess Cloud API: disabled (set USE_LICHESS_CLOUD=true to enable)"

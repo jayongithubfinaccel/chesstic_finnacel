@@ -6,6 +6,8 @@ import requests
 import traceback
 import threading
 import uuid
+import os
+import shutil
 from app.routes import api_bp
 from app.services.chess_service import ChessService
 from app.services.analytics_service import AnalyticsService
@@ -14,6 +16,73 @@ from app.utils import task_manager
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+@api_bp.route('/health', methods=['GET'])
+def health_check():
+    """Health check endpoint for deployment monitoring.
+    
+    Returns status of all critical components:
+    - app: Flask application
+    - stockfish: Stockfish engine availability
+    - chess_api: Chess.com API connectivity
+    - openai: OpenAI API key configured
+    - disk: Disk space
+    """
+    checks = {}
+    overall_status = 'healthy'
+    
+    # Check 1: App is running (always true if we get here)
+    checks['app'] = {'status': 'ok', 'detail': 'Flask application running'}
+    
+    # Check 2: Stockfish engine
+    stockfish_path = current_app.config.get('STOCKFISH_PATH', 'stockfish')
+    try:
+        import chess.engine
+        engine = chess.engine.SimpleEngine.popen_uci(stockfish_path)
+        engine.quit()
+        checks['stockfish'] = {'status': 'ok', 'detail': f'Engine available at {stockfish_path}'}
+    except Exception as e:
+        checks['stockfish'] = {'status': 'error', 'detail': str(e), 'error_code': 'ERR_STOCKFISH_UNAVAILABLE'}
+        overall_status = 'degraded'
+    
+    # Check 3: Chess.com API
+    try:
+        resp = requests.get('https://api.chess.com/pub/player/hikaru', timeout=5)
+        if resp.status_code == 200:
+            checks['chess_api'] = {'status': 'ok', 'detail': 'Chess.com API reachable'}
+        else:
+            checks['chess_api'] = {'status': 'warning', 'detail': f'Chess.com API returned {resp.status_code}', 'error_code': 'ERR_CHESS_API_STATUS'}
+            overall_status = 'degraded'
+    except requests.exceptions.RequestException as e:
+        checks['chess_api'] = {'status': 'error', 'detail': str(e), 'error_code': 'ERR_CHESS_API_UNREACHABLE'}
+        overall_status = 'degraded'
+    
+    # Check 4: OpenAI API key
+    openai_key = current_app.config.get('OPENAI_API_KEY', '')
+    if openai_key and openai_key != 'your_openai_api_key_here':
+        checks['openai'] = {'status': 'ok', 'detail': 'API key configured'}
+    else:
+        checks['openai'] = {'status': 'warning', 'detail': 'API key not configured', 'error_code': 'ERR_OPENAI_NO_KEY'}
+        if overall_status == 'healthy':
+            overall_status = 'degraded'
+    
+    # Check 5: Disk space
+    try:
+        disk = shutil.disk_usage('/')
+        free_gb = disk.free / (1024 ** 3)
+        checks['disk'] = {'status': 'ok' if free_gb > 1 else 'warning', 'detail': f'{free_gb:.1f} GB free'}
+        if free_gb < 1:
+            checks['disk']['error_code'] = 'ERR_LOW_DISK_SPACE'
+            overall_status = 'degraded'
+    except Exception:
+        checks['disk'] = {'status': 'unknown'}
+    
+    status_code = 200 if overall_status != 'unhealthy' else 503
+    return jsonify({
+        'status': overall_status,
+        'checks': checks
+    }), status_code
 
 
 def run_mistake_analysis_background(task_id: str, games: list, username: str, analytics_service):
@@ -129,7 +198,8 @@ def analyze_detailed():
         if data is None:
             return jsonify({
                 'error': 'Request body must be JSON',
-                'status': 'error'
+                'status': 'error',
+                'error_code': 'ERR_INVALID_JSON'
             }), 400
         
         # Extract and validate parameters
@@ -142,20 +212,23 @@ def analyze_detailed():
         if not username:
             return jsonify({
                 'error': 'Username is required',
-                'status': 'error'
+                'status': 'error',
+                'error_code': 'ERR_USERNAME_REQUIRED'
             }), 400
         
         if not validate_username(username):
             return jsonify({
                 'error': 'Invalid username format. Username must be 3-25 characters, alphanumeric with hyphens or underscores',
-                'status': 'error'
+                'status': 'error',
+                'error_code': 'ERR_INVALID_USERNAME'
             }), 400
         
         # Validate date range
         if not start_date or not end_date:
             return jsonify({
                 'error': 'Both start_date and end_date are required',
-                'status': 'error'
+                'status': 'error',
+                'error_code': 'ERR_DATE_REQUIRED'
             }), 400
         
         # PRD v2.2: Check for specific date range errors (30-day max)
@@ -171,7 +244,8 @@ def analyze_detailed():
         if not validate_timezone(timezone):
             return jsonify({
                 'error': f'Invalid timezone: {timezone}. Please provide a valid IANA timezone string (e.g., America/New_York, UTC, Europe/London)',
-                'status': 'error'
+                'status': 'error',
+                'error_code': 'ERR_INVALID_TIMEZONE'
             }), 400
         
         # Check if user exists on Chess.com
@@ -182,12 +256,14 @@ def analyze_detailed():
             if e.response.status_code == 404:
                 return jsonify({
                     'error': f'User "{username}" not found on Chess.com',
-                    'status': 'error'
+                    'status': 'error',
+                    'error_code': 'ERR_USER_NOT_FOUND'
                 }), 404
             else:
                 return jsonify({
                     'error': 'Failed to connect to Chess.com API. Please try again later',
-                    'status': 'error'
+                    'status': 'error',
+                    'error_code': 'ERR_CHESS_API_ERROR'
                 }), 503
         
         # Fetch games from Chess.com
@@ -202,6 +278,7 @@ def analyze_detailed():
             return jsonify({
                 'error': 'Failed to fetch games from Chess.com. Please try again later',
                 'status': 'error',
+                'error_code': 'ERR_CHESS_API_FETCH',
                 'details': str(e)
             }), 503
         except Exception as e:
@@ -210,6 +287,7 @@ def analyze_detailed():
             return jsonify({
                 'error': 'Error fetching game data',
                 'status': 'error',
+                'error_code': 'ERR_GAME_FETCH',
                 'details': str(e)
             }), 500
         
@@ -358,6 +436,7 @@ def analyze_detailed():
             return jsonify({
                 'error': 'Error analyzing game data',
                 'status': 'error',
+                'error_code': 'ERR_ANALYSIS_FAILED',
                 'details': str(e)
             }), 500
     
@@ -367,6 +446,7 @@ def analyze_detailed():
         return jsonify({
             'error': 'Internal server error',
             'status': 'error',
+            'error_code': 'ERR_INTERNAL',
             'details': str(e)
         }), 500
 
