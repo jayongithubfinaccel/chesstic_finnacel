@@ -728,3 +728,139 @@ The analytics methods were originally designed for internal/API use but the note
 - EA-006 (Opening Performance)
 - EA-007 (Opponent Strength)
 - EA-008 (Time of Day Performance)
+
+---
+
+## Bug Fix - March 6, 2026
+
+### Deployment - Service Fails to Start After deploy.sh (Permission Denied)
+**Severity:** Critical  
+**Type:** Deployment / Infrastructure  
+**Server:** 159.65.140.136 (Digital Ocean Droplet)  
+**Discovered During:** Running deploy.sh for fresh deployment
+
+**Issue:**
+After running `deploy.sh`, the `chesstic` systemd service fails to start with `status=203/EXEC` and continuously restarts. The error in `journalctl` shows:
+```
+Failed to execute /var/www/chesstic/venv/bin/gunicorn: Permission denied
+Failed at step EXEC spawning /var/www/chesstic/venv/bin/gunicorn: Permission denied
+```
+
+**Root Causes (3 issues found):**
+
+#### Issue 1: UV Python installation inaccessible to www-data
+The `deploy.sh` uses `uv venv` to create the virtualenv. UV creates the venv with symlinks pointing to its Python installation:
+```
+/var/www/chesstic/venv/bin/python -> /root/.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/bin/python3.12
+```
+However, `/root/.local/share/` has permissions `drwx------` (mode 700), making it inaccessible to the `www-data` user that the systemd service runs as.
+
+**Fix:** `chmod 755 /root/.local/share/`
+
+#### Issue 2: Gunicorn PID file location not writable by www-data
+The `gunicorn_config.py` sets `pidfile = "/var/run/chesstic.pid"`. The `www-data` user cannot create files in `/var/run/`. Gunicorn tries to create a temp file in the pidfile's directory, resulting in:
+```
+PermissionError: [Errno 13] Permission denied: '/var/run/tmpts2vt0o6'
+```
+
+**Fix:** Added `RuntimeDirectory=chesstic` to systemd service and overrode the PID path:
+```
+ExecStart=... --pid /run/chesstic/chesstic.pid run:app
+```
+
+#### Issue 3: Gunicorn log directory doesn't exist
+`gunicorn_config.py` writes to `/var/log/gunicorn/` which doesn't exist. The `on_starting` hook tries to create it but `www-data` can't create directories under `/var/log/`.
+
+**Fix:** `mkdir -p /var/log/gunicorn && chown www-data:www-data /var/log/gunicorn`
+
+#### Issue 4: .env file had development values
+The `deploy.sh` copies `.env.example` to `.env`, which contains placeholder/development values (FLASK_ENV=development, DEBUG=True, etc.).
+
+**Fix:** Updated `.env` with production values (FLASK_ENV=production, DEBUG=False, proper CORS_ORIGINS, generated SECRET_KEY).
+
+**Server-Side Commands Applied:**
+```bash
+# Fix 1: Allow www-data to access UV Python
+chmod 755 /root/.local/share/
+
+# Fix 2: Create log directory
+mkdir -p /var/log/gunicorn && chown www-data:www-data /var/log/gunicorn
+
+# Fix 3: Fix systemd service for PID file
+# Added RuntimeDirectory=chesstic to [Service]
+# Changed ExecStart to include --pid /run/chesstic/chesstic.pid
+
+# Fix 4: Updated .env for production
+# FLASK_ENV=production, DEBUG=False, generated SECRET_KEY, proper CORS_ORIGINS
+
+# Reload and restart
+systemctl daemon-reload
+systemctl restart chesstic
+nginx -s reload
+```
+
+**Test Results After Fix:**
+- Service status: active (running)
+- Gunicorn arbiter booted with 3 workers
+- HTTP 200 on http://159.65.140.136/analytics
+- Nginx correctly proxying requests
+
+**Note for Future Deployments:**
+The `deploy.sh` script has structural issues that will recur on every fresh deployment:
+1. UV creates venvs with symlinks to `/root/.local/share/` (not accessible by www-data)
+2. `gunicorn_config.py` PID path `/var/run/chesstic.pid` is not writable by www-data
+3. `.env` gets overwritten with template values, losing production secrets
+4. The Nginx config needs a reload after deploy (not just `systemctl reload nginx`)
+
+**Recommended:** Use `update.sh` or `quick_deploy.sh` for routine deployments instead of `deploy.sh`.
+
+---
+
+## Bug Fix - March 6, 2026 (Part 2)
+
+### Stockfish Analysis Returns "Analysis task expired" Due to Multi-Worker Memory Isolation
+**Severity:** Critical  
+**Type:** Infrastructure / Architecture  
+**File:** [gunicorn_config.py](gunicorn_config.py)  
+**Server:** 159.65.140.136 (Digital Ocean Droplet, 1 vCPU)  
+**Discovered During:** User testing Stockfish move analysis on https://chesstic.org
+
+**Issue:**
+The "Move Analysis by Game Stage" section showed "Analysis task expired. Please refresh and try again." despite the Stockfish engine running correctly on the server. Server logs confirmed analysis completed successfully (~50s for 10 games), but the frontend never received the results.
+
+**Root Cause:**
+`gunicorn_config.py` set `workers = multiprocessing.cpu_count() * 2 + 1` (= 3 workers on 1 vCPU). The background task system (`task_manager.py`) stores task state **in-memory** using Python dicts. Each Gunicorn worker is a separate process with its own memory space:
+
+1. Worker A handles the `/api/analyze/detailed` POST request, creates a task in its memory, spawns a background thread to run Stockfish
+2. Frontend polls `/api/analyze/mistake-status/{task_id}` every 2 seconds
+3. The polling request gets load-balanced to Worker B or C, which don't have the task in their memory
+4. Worker B/C returns `status: not_found`
+5. Frontend displays "Analysis task expired"
+
+**Fix:**
+Changed `gunicorn_config.py` to use 1 worker with 4 threads (gthread):
+```python
+# Before (broken):
+workers = multiprocessing.cpu_count() * 2 + 1  # 3 workers, separate memory
+worker_class = "sync"
+timeout = 120
+
+# After (fixed):
+workers = 1        # Single worker: all threads share memory
+threads = 4        # 4 threads for concurrency
+worker_class = "gthread"
+timeout = 300      # 5 min for Stockfish analysis on 1 vCPU
+```
+
+**Why 1 worker + threads works:**
+- All threads share the same process memory, so task state is visible to all request handlers
+- On a 1 vCPU server, multiple workers don't provide CPU parallelism anyway (context switching overhead)
+- `gthread` worker class handles concurrent requests via threads within the single process
+
+**Verification:**
+- Triggered analysis via `/api/analyze/detailed`
+- Poll at 10s: `status: processing, progress: 1/13 (7%)`
+- Poll at 70s: `status: completed` with full stage data (early, middle, endgame)
+- No more "task expired" errors
+
+**Commit:** `9bdb5b3` - "fix: Use 1 worker + gthread for in-memory task state sharing"
