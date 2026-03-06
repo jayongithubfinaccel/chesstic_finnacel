@@ -3,11 +3,51 @@
 ## Project Changes Log
 
 **Project:** Enhanced Chess Analytics Dashboard  
-**Last Updated:** February 20, 2026 (PRD v2.11 - Iteration 12: 1 vCPU Performance Optimization)
+**Last Updated:** March 6, 2026 (Production Hardening: HTTPS, Error Monitoring, Deploy v2)
 
 ---
 
-## LATEST UPDATE: Iteration 12 - 1 vCPU Performance Optimization (February 20, 2026)
+## LATEST UPDATE: Production Hardening - March 6, 2026
+
+### Summary
+Production hardening: HTTPS via certbot for chesstic.org, analytics served directly at homepage (/), error monitoring with /api/health endpoint and error_code fields on all API responses, structured logging, and complete deploy.sh rewrite fixing UV permissions, systemd PATH, .env preservation, and SSL automation.
+
+**Status:** ✅ DEPLOYED to production (commit ef42485)
+
+### Changes Made
+
+#### 1. Homepage Routing (app/routes/views.py)
+- **Line 7-8**: Dual route decorators `@main_bp.route('/')` and `@main_bp.route('/analytics')` on single `analytics()` function
+- Removed old `index()` redirect function
+- Analytics page now served directly at both `/` and `/analytics`
+
+#### 2. Error Monitoring (app/routes/api.py)
+- **New endpoint**: `/api/health` - checks stockfish, chess.com API, OpenAI key, disk space
+- **All error responses** now include `error_code` field (e.g., `ERR_INVALID_USERNAME`, `ERR_ANALYSIS_FAILED`, `ERR_INTERNAL`)
+- Added imports: `os`, `shutil`
+
+#### 3. Structured Logging (app/__init__.py)
+- New `_setup_logging(app)` function with format: `[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s`
+- Global error handlers for 404 (`ERR_NOT_FOUND`), 500 (`ERR_INTERNAL`), 429 (`ERR_RATE_LIMIT`)
+
+#### 4. Deploy Script v2 (deploy.sh)
+- **Fixed**: UV venv symlinks - `chmod 755 /root/.local/share/` for www-data access
+- **Fixed**: systemd PATH includes `/usr/local/bin` for Stockfish
+- **Fixed**: PID file uses `RuntimeDirectory` (writable by www-data)
+- **Added**: `.env` preservation on re-deploy (backup/restore)
+- **Added**: Nginx configured for `chesstic.org` + SSL via certbot
+- **Added**: `/api/health` verification step
+- **Added**: Gunicorn log directory creation
+
+#### 5. Server Configuration (applied directly)
+- SSL certificate via Let's Encrypt for chesstic.org + www.chesstic.org
+- Nginx HTTPS redirect (80 → 443)
+- Stockfish v18 at `/usr/local/bin/stockfish`
+- CORS_ORIGINS includes `https://chesstic.org`
+
+---
+
+## Iteration 12 - 1 vCPU Performance Optimization (February 20, 2026)
 
 ### Summary
 Implemented comprehensive performance optimizations for DigitalOcean 1 vCPU server. Switched from time-based to node-limited Stockfish analysis (50K nodes), reduced analysis scope to 15 moves per game (5+5+5 per stage), capped analysis at 10 games, and disabled Lichess Cloud API by default due to frequent timeout issues. All changes implemented with full backward compatibility.
