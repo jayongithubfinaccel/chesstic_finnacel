@@ -1,23 +1,28 @@
 """
 Gunicorn configuration file for production deployment.
+
+NOTE: We use 1 worker + threads because the app stores background task state
+in-memory (task_manager.py). Multiple workers would have separate memory spaces,
+causing polling requests to hit workers that don't have the task data (resulting
+in "Analysis task expired" errors). On a 1 vCPU server, 1 worker with threads
+is also more efficient than multiple processes.
 """
-import multiprocessing
 import os
 
 # Server socket
 bind = "127.0.0.1:8000"
 backlog = 2048
 
-# Worker processes
-workers = multiprocessing.cpu_count() * 2 + 1
-worker_class = "sync"
-worker_connections = 1000
-timeout = 120  # Increased for long-running chess analysis
+# Worker configuration: 1 worker + threads for in-memory task state sharing
+workers = 1
+threads = 4
+worker_class = "gthread"
+timeout = 300  # 5 min: Stockfish analysis can take ~60s on 1 vCPU
 keepalive = 5
 
 # Restart workers after this many requests to prevent memory leaks
-max_requests = 1000
-max_requests_jitter = 50
+max_requests = 5000
+max_requests_jitter = 200
 
 # Logging
 accesslog = "/var/log/gunicorn/chesstic_access.log"
