@@ -2,11 +2,35 @@
 
 ## Project: Enhanced Chess Analytics Dashboard
 
-**Last Updated:** February 20, 2026
+**Last Updated:** March 9, 2026
 
 ---
 
-## ✅ LATEST: Iteration 12 - 1 vCPU Performance Optimization (COMPLETED)
+## ✅ LATEST: Production Deployment - Iterations 13 & 14 (COMPLETED)
+**Completion Date:** March 9, 2026  
+**Status:** ✅ Complete  
+**Commits:** c406ccb → c8cdaa4
+
+### Summary
+Deployed Iteration 13 (Video Learning Button) and Iteration 14 (Unified Performance Chart + Placeholder Update) to production at https://chesstic.org/. Fixed PEP 668 pip issue on Ubuntu 25.04, committed missing IT13 CSS, and updated update.sh for uv-based deployments.
+
+### Key Deliverables
+- ✅ Iteration 13 features live on production (Video Learning button with GM Igor Smirnov YouTube links)
+- ✅ Iteration 14 features live on production (Unified Performance Chart, placeholder update)
+- ✅ PEP 668 pip compatibility resolved (uv pip in update.sh)
+- ✅ Missing CSS for .opening-link-video committed and deployed
+- ✅ 16/16 automated production tests passing
+- ✅ update.sh fixed for future deployments with uv package manager
+
+### Server Details
+- **Server:** DigitalOcean 159.65.140.136 (Ubuntu 25.04, 1 vCPU)
+- **Python:** 3.12.12 in venv, uv package manager
+- **Service:** Gunicorn on port 8000, Nginx reverse proxy with SSL
+- **Latest commit on server:** c8cdaa4
+
+---
+
+## ✅ Iteration 12 - 1 vCPU Performance Optimization (COMPLETED)
 **Completion Date:** February 20, 2026  
 **Status:** ✅ Complete  
 **PRD Version:** 2.11

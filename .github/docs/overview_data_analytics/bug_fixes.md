@@ -4,6 +4,46 @@
 
 ---
 
+## Bug Fix - March 9, 2026
+
+### PEP 668 pip Install Failure on Ubuntu 25.04
+**Severity:** High  
+**File:** `update.sh`  
+**Discovered During:** Production deployment of Iterations 13 & 14
+
+**Issue:**
+`update.sh` used `pip install -r requirements.txt` which failed on Ubuntu 25.04 due to PEP 668 externally-managed-environment restriction. The venv was created with `uv` and had no pip binary.
+
+**Root Cause:**
+Ubuntu 25.04 ships Python 3.13 as system Python and enforces PEP 668, blocking system-wide pip installs. The project venv was created with `uv venv` which doesn't include pip.
+
+**Fix Applied:**
+Updated `update.sh` to detect and use `uv pip install` (at `$HOME/.local/bin/uv`), with fallback to ensurepip+pip. Package verification changed from `pip show` to `python3 -c "import flask"`.
+
+**Commit:** c8cdaa4
+
+---
+
+## Bug Fix - March 9, 2026
+
+### Missing Iteration 13 CSS Not Committed
+**Severity:** Medium  
+**File:** `static/css/style.css`  
+**Discovered During:** Production testing after deployment
+
+**Issue:**
+`.opening-link-video` CSS class was never committed to git. Video Learning buttons rendered without styling on production.
+
+**Root Cause:**
+During Iteration 13 development, the JS changes in `analytics.js` were committed as part of the Iteration 14 batch, but the corresponding CSS in `style.css` remained in unstaged local changes.
+
+**Fix Applied:**
+Committed the CSS rules for `.opening-link-video` and `.opening-link-video:hover` along with the iteration summary document.
+
+**Commit:** 2828cef
+
+---
+
 ## Bug Fix - December 28, 2025
 
 ### Chess Advisor Service - Incorrect Function Implementation

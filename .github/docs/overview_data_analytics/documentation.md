@@ -3,11 +3,89 @@
 ## Project Changes Log
 
 **Project:** Enhanced Chess Analytics Dashboard  
-**Last Updated:** March 6, 2026 (Production Hardening: HTTPS, Error Monitoring, Deploy v2)
+**Last Updated:** March 9, 2026 (EA-028: Production Deployment of Iterations 13 & 14)
 
 ---
 
-## LATEST UPDATE: Production Hardening - March 6, 2026
+## LATEST UPDATE: Production Deployment - Iterations 13 & 14 (EA-028) - March 9, 2026
+
+### Summary
+Deployed Iteration 13 (Video Learning Button) and Iteration 14 (Unified Performance Chart + Placeholder Update) to production server at 159.65.140.136 (https://chesstic.org/). Fixed missing CSS for Iteration 13, resolved PEP 668 pip compatibility issue on Ubuntu 25.04, and updated `update.sh` for future uv-based deployments.
+
+**Status:** ✅ DEPLOYED to production (commit c8cdaa4)
+
+### Deployment Details
+
+#### Issues Encountered & Resolved
+
+1. **PEP 668 pip install failure**: Ubuntu 25.04 system Python 3.13 blocks `pip install` outside venv. The venv was created with `uv` (no pip binary). Fixed by using `uv pip install` directly.
+
+2. **Missing Iteration 13 CSS**: `.opening-link-video` CSS class in `style.css` was never committed to git. The JS changes were included in the IT14 analytics.js commit, but the CSS was in unstaged local changes. Fixed by committing (2828cef).
+
+3. **update.sh pip incompatibility**: Script used system `pip install` which fails on PEP 668 systems. Rewrote dependency install section to detect and use `uv pip` with fallback to ensurepip+pip.
+
+#### Changes Made
+
+##### 1. `update.sh`
+- **Lines 40-75**: Replaced `pip install -r requirements.txt` with uv-based approach:
+  - Detects `uv` at `$HOME/.local/bin/uv`
+  - Uses `$UV_BIN pip install -r requirements.txt --python venv/bin/python3`
+  - Fallback: creates pip via `ensurepip` if uv unavailable
+- **Lines 80-90**: Package verification uses `venv/bin/python3 -c "import flask"` instead of `pip show flask`
+
+##### 2. `static/css/style.css` (previously uncommitted)
+- **Lines ~918-925**: `.opening-link-video` and `.opening-link-video:hover` — blue button styling for Video Learning links (was missing from git)
+
+##### 3. `.github/docs/overview_data_analytics/iterations/iteration_13_summary.md` (previously untracked)
+- Iteration 13 implementation summary document — committed alongside CSS fix
+
+#### Production Verification
+- 16/16 automated production tests passed covering:
+  - Website accessibility (HTTP 200 on / and /analytics)
+  - IT14 features: placeholder text, removed "Game Results" section, unified "Performance Overview" heading, chart canvas, "Overall Win Rate" dataset, 3 chart colors
+  - IT13 features: `getVideoLearningUrl` function, GMIgorSmirnov URL, `.opening-link-video` in JS/CSS, fallback URL
+  - API endpoint POST /api/analyze (tested with "hikaru", 200 response with game data)
+  - systemd service health
+  - Git version match (c8cdaa4)
+
+#### Git Commits
+- `c406ccb` — Iteration 14: Unified performance chart & placeholder update
+- `894bed5` — Add Iteration 14 completion summary
+- `2828cef` — Iteration 13: Add Video Learning button CSS and iteration summary
+- `c8cdaa4` — fix: update.sh to use uv pip instead of system pip (PEP 668 fix)
+
+---
+
+## Previous Update: YouTube Video Learning Button (EA-027) - March 7, 2026
+
+### Summary
+Added a "📺 Video Learning" button to every opening row in the Opening Performance section. Clicking the button opens a YouTube channel search on Remote Chess Academy (GM Igor Smirnov) filtered by the opening name — no API key required.
+
+**PRD Version:** 2.12 (Iteration 13)  
+**Status:** ✅ Implemented and tested
+
+### Changes Made
+
+#### 1. `static/js/analytics.js`
+- **New function `getVideoLearningUrl(openingName)`** (before `renderOpeningsTable`): constructs YouTube channel search URL `https://www.youtube.com/@GMIgorSmirnov/search?query={encoded}`. Falls back to `https://www.youtube.com/watch?v=gxfBW41YD14` when opening name is null/empty.
+- **`renderOpeningsTable()`** — added Video Learning `<a>` tag inside `.opening-links` div next to the existing Example Game button. Lines changed: `opening-links` template literal.
+
+#### 2. `static/css/style.css`
+- **Lines ~918-925**: Added `.opening-link-video` and `.opening-link-video:hover` CSS rules — blue (#3498db / #2980b9) variant of the existing `.opening-link` button.
+
+#### 3. `tests/test_integration_e2e.py`
+- **New class `TestVideoLearningButton`** (3 tests):
+  - `test_video_learning_button_exists` — verifies buttons render in opening rows
+  - `test_video_learning_button_href_format` — verifies URL contains `@GMIgorSmirnov/search?query=`
+  - `test_video_learning_button_opens_new_tab` — verifies `target="_blank"`
+
+### Test Results
+- **Backend (unit/integration):** 63/63 passed
+- **Frontend E2E (Playwright):** 3/3 passed (TestVideoLearningButton)
+
+---
+
+## Previous Update: Production Hardening - March 6, 2026
 
 ### Summary
 Production hardening: HTTPS via certbot for chesstic.org, analytics served directly at homepage (/), error monitoring with /api/health endpoint and error_code fields on all API responses, structured logging, and complete deploy.sh rewrite fixing UV permissions, systemd PATH, .env preservation, and SSL automation.
