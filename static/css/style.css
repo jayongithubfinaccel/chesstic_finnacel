@@ -914,6 +914,17 @@ body {
     text-decoration: none;
 }
 
+/* EA-027: Video Learning button — blue variant */
+.opening-link-video {
+    background-color: #3498db;
+    color: white !important;
+}
+
+.opening-link-video:hover {
+    background-color: #2980b9;
+    color: white !important;
+}
+
 .opening-name {
     font-weight: 600;
     color: var(--text-dark);
