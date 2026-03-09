@@ -41,24 +41,40 @@ echo -e "${GREEN}✓ Code updated${NC}"
 
 # Update Python dependencies safely
 echo -e "${YELLOW}📦 Updating dependencies (this may take a minute)...${NC}"
-source venv/bin/activate
-pip install --upgrade pip --quiet
-pip install -r requirements.txt --upgrade
-echo -e "${GREEN}✓ Dependencies updated${NC}"
+
+# Use uv if available (venv was created with uv, no pip installed)
+UV_BIN=$(command -v uv 2>/dev/null || echo "$HOME/.local/bin/uv")
+if [ -x "$UV_BIN" ]; then
+    $UV_BIN pip install -r requirements.txt --python venv/bin/python3
+    echo -e "${GREEN}✓ Dependencies updated (via uv)${NC}"
+else
+    # Fallback: install pip into venv first, then use it
+    source venv/bin/activate
+    python3 -m ensurepip --upgrade 2>/dev/null || true
+    pip install --upgrade pip --quiet
+    pip install -r requirements.txt --upgrade
+    deactivate
+    echo -e "${GREEN}✓ Dependencies updated (via pip)${NC}"
+fi
 
 # Verify critical packages are installed
 echo -e "${YELLOW}🔍 Verifying critical packages...${NC}"
 MISSING_PACKAGES=""
 for pkg in openai python-chess pytz Flask Flask-CORS requests; do
-    if ! pip show $pkg &> /dev/null; then
-        MISSING_PACKAGES="$MISSING_PACKAGES $pkg"
+    if ! venv/bin/python3 -c "import importlib; importlib.import_module('${pkg}'.replace('-','_').lower())" &> /dev/null; then
+        # Try alternate import names
+        case $pkg in
+            Flask) venv/bin/python3 -c "import flask" &> /dev/null || MISSING_PACKAGES="$MISSING_PACKAGES $pkg" ;;
+            Flask-CORS) venv/bin/python3 -c "import flask_cors" &> /dev/null || MISSING_PACKAGES="$MISSING_PACKAGES $pkg" ;;
+            python-chess) venv/bin/python3 -c "import chess" &> /dev/null || MISSING_PACKAGES="$MISSING_PACKAGES $pkg" ;;
+            *) MISSING_PACKAGES="$MISSING_PACKAGES $pkg" ;;
+        esac
     fi
 done
 
 if [ ! -z "$MISSING_PACKAGES" ]; then
     echo -e "${RED}✗ Missing packages:$MISSING_PACKAGES${NC}"
     echo -e "${RED}Rolling back...${NC}"
-    deactivate
     systemctl stop ${SERVICE_NAME}
     rm -rf ${APP_DIR}
     cp -r ${BACKUP_DIR} ${APP_DIR}
@@ -66,8 +82,6 @@ if [ ! -z "$MISSING_PACKAGES" ]; then
     exit 1
 fi
 echo -e "${GREEN}✓ All packages verified${NC}"
-
-deactivate
 
 # Fix permissions
 echo -e "${YELLOW}🔒 Fixing permissions...${NC}"
