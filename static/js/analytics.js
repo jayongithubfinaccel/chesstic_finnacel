@@ -304,8 +304,7 @@ async function renderDashboard(data) {
     // Render header
     renderAnalysisHeader(data);
     
-    // Render each section
-    await renderOverallPerformance(data.sections.overall_performance);
+    // Render each section (Section 1 removed - merged into Color Performance)
     await renderColorPerformance(data.sections.color_performance);
     await renderEloProgression(data.sections.elo_progression);
     await renderTerminations(data.sections.termination_wins, data.sections.termination_losses);
@@ -339,93 +338,7 @@ function renderAnalysisHeader(data) {
         `${data.total_games} games analyzed`;
 }
 
-// Section 1: Overall Performance Over Time (Win Rate %)
-async function renderOverallPerformance(data) {
-    if (!data || !data.daily_stats || data.daily_stats.length === 0) {
-        return;
-    }
-    
-    const dates = data.daily_stats.map(d => d.date);
-    const wins = data.daily_stats.map(d => d.wins);
-    const losses = data.daily_stats.map(d => d.losses);
-    const draws = data.daily_stats.map(d => d.draws);
-    
-    // Calculate win rate percentage for each day
-    const winRates = data.daily_stats.map(d => {
-        const total = d.wins + d.losses + d.draws;
-        return total > 0 ? ((d.wins / total) * 100).toFixed(1) : 0;
-    });
-    
-    const ctx = document.getElementById('overallPerformanceChart');
-    charts.overall = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: dates,
-            datasets: [
-                {
-                    label: 'Win Rate %',
-                    data: winRates,
-                    borderColor: '#3498db',
-                    backgroundColor: 'rgba(52, 152, 219, 0.1)',
-                    tension: 0.3,
-                    fill: true,
-                    pointRadius: 4,
-                    pointHoverRadius: 6
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: {
-                mode: 'index',
-                intersect: false
-            },
-            plugins: {
-                legend: {
-                    display: false
-                },
-                tooltip: {
-                    callbacks: {
-                        title: (context) => formatDate(context[0].label),
-                        label: (context) => {
-                            const index = context.dataIndex;
-                            return [
-                                `Win Rate: ${context.parsed.y}%`,
-                                `Wins: ${wins[index]}`,
-                                `Losses: ${losses[index]}`,
-                                `Draws: ${draws[index]}`
-                            ];
-                        }
-                    }
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    max: 100,
-                    title: {
-                        display: true,
-                        text: 'Win Rate %'
-                    },
-                    ticks: {
-                        callback: function(value) {
-                            return value + '%';
-                        }
-                    }
-                },
-                x: {
-                    title: {
-                        display: true,
-                        text: 'Date'
-                    }
-                }
-            }
-        }
-    });
-}
-
-// Section 2: Color Performance (Unified Chart)
+// Section 1: Color Performance (Unified Chart with Overall/White/Black)
 async function renderColorPerformance(data) {
     if (!data) return;
     
@@ -485,6 +398,38 @@ function renderUnifiedColorChart(data) {
     const blackDates = data.black.daily_stats.map(d => d.date);
     const allDates = [...new Set([...whiteDates, ...blackDates])].sort();
     
+    // Calculate overall win rate by combining White and Black data
+    const overallWinRates = allDates.map(date => {
+        const whiteStat = data.white.daily_stats.find(d => d.date === date);
+        const blackStat = data.black.daily_stats.find(d => d.date === date);
+        
+        const whiteWins = whiteStat ? whiteStat.wins : 0;
+        const whiteLosses = whiteStat ? whiteStat.losses : 0;
+        const whiteDraws = whiteStat ? whiteStat.draws : 0;
+        const blackWins = blackStat ? blackStat.wins : 0;
+        const blackLosses = blackStat ? blackStat.losses : 0;
+        const blackDraws = blackStat ? blackStat.draws : 0;
+        
+        const totalWins = whiteWins + blackWins;
+        const totalLosses = whiteLosses + blackLosses;
+        const totalDraws = whiteDraws + blackDraws;
+        const totalGames = totalWins + totalLosses + totalDraws;
+        
+        return totalGames > 0 ? ((totalWins / totalGames) * 100).toFixed(1) : 0;
+    });
+    
+    // Store detailed data for overall tooltips
+    const overallDetails = allDates.map(date => {
+        const whiteStat = data.white.daily_stats.find(d => d.date === date);
+        const blackStat = data.black.daily_stats.find(d => d.date === date);
+        
+        return {
+            wins: (whiteStat?.wins || 0) + (blackStat?.wins || 0),
+            losses: (whiteStat?.losses || 0) + (blackStat?.losses || 0),
+            draws: (whiteStat?.draws || 0) + (blackStat?.draws || 0)
+        };
+    });
+    
     // Calculate win rates for each color by date
     const whiteWinRates = allDates.map(date => {
         const stat = data.white.daily_stats.find(d => d.date === date);
@@ -517,6 +462,19 @@ function renderUnifiedColorChart(data) {
         data: {
             labels: allDates,
             datasets: [
+                {
+                    label: 'Overall Win Rate',
+                    data: overallWinRates,
+                    borderColor: '#3498db',
+                    backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                    tension: 0.3,
+                    fill: true,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    pointBackgroundColor: '#3498db',
+                    pointBorderColor: '#2980b9',
+                    pointBorderWidth: 2
+                },
                 {
                     label: 'White Win Rate',
                     data: whiteWinRates,
@@ -555,19 +513,37 @@ function renderUnifiedColorChart(data) {
             plugins: {
                 legend: {
                     display: true,
-                    position: 'top'
+                    position: 'top',
+                    labels: {
+                        boxWidth: 40,
+                        padding: 15
+                    }
                 },
                 tooltip: {
                     callbacks: {
                         title: (context) => formatDate(context[0].label),
                         label: (context) => {
                             const index = context.dataIndex;
-                            const isWhite = context.datasetIndex === 0;
-                            const details = isWhite ? whiteDetails[index] : blackDetails[index];
-                            const color = isWhite ? 'White' : 'Black';
+                            const datasetIndex = context.datasetIndex;
+                            
+                            // Determine which line was hovered
+                            let details, label;
+                            if (datasetIndex === 0) {
+                                // Overall
+                                details = overallDetails[index];
+                                label = 'Overall';
+                            } else if (datasetIndex === 1) {
+                                // White
+                                details = whiteDetails[index];
+                                label = 'White';
+                            } else {
+                                // Black
+                                details = blackDetails[index];
+                                label = 'Black';
+                            }
                             
                             return [
-                                `${color} Win Rate: ${context.parsed.y}%`,
+                                `${label} Win Rate: ${context.parsed.y}%`,
                                 `Wins: ${details.wins}`,
                                 `Losses: ${details.losses}`,
                                 `Draws: ${details.draws}`
@@ -809,6 +785,18 @@ async function renderOpeningPerformance(data) {
     }
 }
 
+/**
+ * EA-027: Returns YouTube channel search URL for Remote Chess Academy.
+ * Falls back to a default video if opening name is missing.
+ */
+function getVideoLearningUrl(openingName) {
+    if (!openingName || openingName.trim() === '') {
+        return 'https://www.youtube.com/watch?v=gxfBW41YD14';
+    }
+    const encoded = encodeURIComponent(openingName.trim());
+    return `https://www.youtube.com/@GMIgorSmirnov/search?query=${encoded}`;
+}
+
 function renderOpeningsTable(elementId, openings, color) {
     // Iteration 5: Display first 6 moves, Lichess URL, and Chess.com game URL
     const element = document.getElementById(elementId);
@@ -831,6 +819,7 @@ function renderOpeningsTable(elementId, openings, color) {
                     <div class="opening-links">
                         ${opening.lichess_url ? `<a href="${opening.lichess_url}" target="_blank" class="opening-link">🔗 View on Lichess</a>` : ''}
                         ${opening.example_game_url ? `<a href="${opening.example_game_url}" target="_blank" class="opening-link">🔗 Example Game</a>` : ''}
+                        <a href="${getVideoLearningUrl(opening.opening)}" target="_blank" class="opening-link opening-link-video">📺 Video Learning</a>
                     </div>
                 </div>
                 <div class="opening-stats">

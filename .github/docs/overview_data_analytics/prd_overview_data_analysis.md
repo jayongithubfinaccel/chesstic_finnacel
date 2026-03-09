@@ -1,4 +1,4 @@
-# PRD: Enhanced Chess Analytics Dashboard (v2.11)
+# PRD: Enhanced Chess Analytics Dashboard (v2.13)
 
 ## Project overview
 
@@ -27,6 +27,280 @@ The system will fetch game data from the Chess.com Public API, process and analy
 # PRD change history
 
 This section tracks all iterations and modifications to the PRD document. Engineers should review this section to understand the latest changes and their context.
+
+## Iteration 14 - March 9, 2026
+
+**Version:** 2.13  
+**Focus:** UI improvements for chart consolidation and placeholder update
+
+### Context
+
+**User need:** Players want a more consolidated visualization that shows overall performance alongside color-specific performance in a single chart. This reduces scrolling and makes it easier to compare overall win rate with White and Black performance at a glance. Additionally, using a more recognizable Chess.com username as a placeholder improves user understanding of expected input format.
+
+**Key changes:**
+1. Merge Section 1 (Overall Performance) and Section 2 (Color Performance) into a single unified chart
+2. Update placeholder text from "jay_fh" to "hikaru" (GM Hikaru Nakamura's username)
+
+### Changes Summary
+
+**Change 1 - Unified Performance Chart with 3 Lines (EA-028 Enhancement):**
+- **Merged:** Section 1 (Overall Performance) and Section 2 (Color Performance) into single chart
+  - **Previous:** Section 1 showed overall win rate in one chart, Section 2 showed White/Black in another chart
+  - **New:** Single chart displays 3 lines:
+    * Overall win rate (blue, #3498db)
+    * White win rate (light gray, #95a5a6)
+    * Black win rate (dark gray/black, #34495e)
+- **Layout changes:**
+  - Remove Section 1 as standalone section
+  - Section 2 becomes the primary performance chart (renamed to "Performance Over Time")
+  - Keep White and Black summary cards above the unified chart
+  - Add overall statistics to header card or new summary card
+- **Benefits:**
+  - ✅ Single glance comparison of all three metrics
+  - ✅ Less scrolling and visual fragmentation
+  - ✅ Better space utilization
+  - ✅ Maintains all existing data points and tooltips
+- **Implementation:**
+  - `static/js/analytics.js`: Merge `renderOverallPerformance()` into `renderUnifiedColorChart()`
+  - Add overall win rate as third dataset in Chart.js configuration
+  - Update tooltips to distinguish between overall/White/Black data
+  - `templates/analytics.html`: Remove Section 1 HTML, update Section 2 heading and description
+  - `static/css/style.css`: Adjust spacing for consolidated section
+
+**Change 2 - Update Username Placeholder (EA-029 Enhancement):**
+- **Changed:** Placeholder text in analytics form from "e.g., jay_fh" to "e.g., hikaru"
+  - **Rationale:** "hikaru" is a more recognizable Chess.com username (GM Hikaru Nakamura)
+  - **Impact:** Better user guidance, more professional appearance
+- **Implementation:**
+  - `templates/analytics.html`: Update `placeholder` attribute
+
+### User Stories
+
+**Requirement ID:** EA-028
+
+**User story:** As a chess player, I want to see my overall performance and color-specific performance in a single chart so I can quickly compare all three metrics without scrolling.
+
+**Acceptance criteria:**
+- [ ] Single chart displays three lines: Overall, White, and Black win rates
+- [ ] Chart legend clearly distinguishes between the three lines
+- [ ] Tooltips show metric-specific data on hover (date, win rate, W/L/D for each line)
+- [ ] White and Black summary cards remain above the chart
+- [ ] Overall statistics are displayed prominently (in header card or new summary card)
+- [ ] Chart is responsive and maintains readability on all devices
+- [ ] Section 1 is removed from the analytics page
+- [ ] Section 2 heading updated to reflect unified performance data
+
+---
+
+**Requirement ID:** EA-029
+
+**User story:** As a new user, I want to see a recognizable Chess.com username as an example so I understand what format to enter.
+
+**Acceptance criteria:**
+- [ ] Placeholder text changed from "e.g., jay_fh" to "e.g., hikaru"
+- [ ] Placeholder displays correctly in the username input field
+- [ ] No functional changes to form validation or submission
+
+### Technical Impact
+
+**Modified Files:**
+- `templates/analytics.html` — Remove Section 1 HTML, update Section 2 heading, update placeholder
+- `static/js/analytics.js` — Merge overall performance into unified chart, add third dataset
+- `static/css/style.css` — Adjust section spacing if needed
+
+**No changes required:**
+- Backend services (chart data remains unchanged)
+- API endpoints
+- `config.py` / `.env`
+
+### Implementation Notes
+
+**Frontend logic (`analytics.js`):**
+```javascript
+// Merge renderOverallPerformance into renderUnifiedColorChart
+function renderUnifiedColorChart(data) {
+    // Calculate overall win rate
+    const overallWinRates = data.daily_stats.map(d => {
+        const total = d.wins + d.losses + d.draws;
+        return total > 0 ? ((d.wins / total) * 100).toFixed(1) : 0;
+    });
+    
+    // Add third dataset for overall performance
+    datasets: [
+        {
+            label: 'Overall Win Rate',
+            data: overallWinRates,
+            borderColor: '#3498db',
+            backgroundColor: 'rgba(52, 152, 219, 0.1)',
+            tension: 0.3
+        },
+        {
+            label: 'White Win Rate',
+            data: whiteWinRates,
+            borderColor: '#95a5a6',
+            // ... existing config
+        },
+        {
+            label: 'Black Win Rate',
+            data: blackWinRates,
+            borderColor: '#34495e',
+            // ... existing config
+        }
+    ]
+}
+```
+
+**HTML changes (`analytics.html`):**
+```html
+<!-- REMOVE Section 1 entirely -->
+
+<!-- UPDATE Section 2 heading -->
+<h3>📈 Performance Over Time</h3>
+<p class="section-description">Track your overall and color-specific win rates over time</p>
+
+<!-- UPDATE placeholder -->
+<input type="text" id="username" name="username" placeholder="e.g., hikaru" required>
+```
+
+### Testing Strategy
+
+**Phase 1: Unit / Manual Tests**
+- Verify Section 1 is removed from analytics page
+- Verify Section 2 displays three lines (Overall, White, Black)
+- Verify chart legend shows all three labels
+- Verify tooltips display correct data for each line
+- Verify White and Black summary cards remain visible
+- Verify placeholder text is "e.g., hikaru"
+- Test chart responsiveness on mobile devices
+
+**Phase 2: E2E Tests (Playwright)**
+- Load analytics page with real Chess.com username
+- Verify 3 lines render in unified chart
+- Hover over each line and verify tooltip content
+- Verify placeholder text in username input field
+- Test on various screen sizes
+
+### Documentation Updates
+- [x] Update PRD version from 2.12 to 2.13
+- [x] Add Iteration 14 changelog entry
+- [ ] Create `iteration_14_summary.md`
+- [ ] Update `documentation.md` with implementation details after completion
+
+---
+
+## Iteration 13 - March 7, 2026
+
+**Version:** 2.12  
+**Focus:** YouTube video learning integration for Opening Performance section
+
+### Context
+
+**User need:** Players want to learn how to improve their game after reviewing their opening statistics. Currently the Opening Performance section shows an "Example Game" button. Adding a "Video Learning" button gives users direct access to educational chess content matched to the specific openings they play.
+
+**Video source:** Remote Chess Academy by GM Igor Smirnov (https://www.youtube.com/@GMIgorSmirnov) — a highly regarded chess instruction channel with extensive opening tutorials.
+
+### Changes Summary
+
+**Change 1 - Video Learning Button in Opening Performance (EA-027 Enhancement):**
+- **Added:** "Video Learning" button next to the existing "Example Game" button in the Opening Performance section
+  - **Trigger:** User clicks the button on any opening row
+  - **Action:** Redirects user (new tab) to the most relevant video on the Remote Chess Academy YouTube channel
+  - **Channel:** https://www.youtube.com/@GMIgorSmirnov (GM Igor Smirnov)
+- **Matching logic:**
+  - Search for a video on the channel whose title contains the opening name (case-insensitive)
+  - **Primary approach:** Use the YouTube channel search URL — `https://www.youtube.com/@GMIgorSmirnov/search?query={encoded_opening_name}` — this requires no API key and targets the channel directly
+  - **Fallback:** If channel search returns no relevant results, redirect to https://www.youtube.com/watch?v=gxfBW41YD14
+- **Implementation:**
+  - Frontend `analytics.js`: Generate YouTube channel search URL using the opening name as the query parameter
+  - URL encode the opening name (e.g., "Sicilian Defense" → `Sicilian+Defense`)
+  - No backend changes required — URL is constructed client-side
+  - Button opens link in a new browser tab (`target="_blank"`)
+- **Benefits:**
+  - ✅ **No API key needed:** YouTube channel search URL is a public, no-auth endpoint
+  - ✅ **Always up to date:** Links to live channel search, not a static video list
+  - ✅ **Relevant content:** Channel search surfaces the most relevant video for the opening
+  - ✅ **Graceful fallback:** General chess fundamentals video shown when no match exists
+- **UI changes:**
+  - `templates/analytics.html` / `static/js/analytics.js`: Add "📺 Video Learning" button styled consistently with existing "🔗 Example Game" button
+  - Button color: Blue (#3498db) to visually distinguish it from the green/grey link buttons
+  - Opens in new tab, does not navigate user away from the analytics dashboard
+
+### User Story
+
+**Requirement ID:** EA-027
+
+**User story:** As a chess player, I want to watch tutorial videos for the openings I play so I can improve my understanding and performance in those lines.
+
+**Acceptance criteria:**
+- [ ] A "Video Learning" button appears next to the "Example Game" button for each opening row
+- [ ] Clicking the button opens a new browser tab
+- [ ] The new tab loads a YouTube channel search for Remote Chess Academy filtered by the opening name
+- [ ] URL uses the format: `https://www.youtube.com/@GMIgorSmirnov/search?query={encoded_opening_name}`
+- [ ] Opening name is properly URL-encoded (spaces replaced, special characters encoded)
+- [ ] Fallback URL `https://www.youtube.com/watch?v=gxfBW41YD14` is used when opening name is missing or empty
+- [ ] Button is styled consistently with existing opening link buttons
+- [ ] Button works for both White and Black opening tables
+- [ ] No backend API calls are required for this feature
+
+### Technical Impact
+
+**Modified Files:**
+- `static/js/analytics.js` — Add `getVideoLearningUrl()` helper function; add Video Learning button HTML in `renderOpeningsTable()`
+- `static/css/style.css` — Add `.opening-link-video` button style (blue variant)
+
+**No changes required:**
+- Backend services (pure frontend feature)
+- `templates/analytics.html` (button rendered dynamically by JS)
+- `config.py` / `.env`
+
+### Implementation Notes
+
+**Frontend logic (`analytics.js`):**
+```javascript
+function getVideoLearningUrl(openingName) {
+    if (!openingName) return 'https://www.youtube.com/watch?v=gxfBW41YD14';
+    const encoded = encodeURIComponent(openingName);
+    return `https://www.youtube.com/@GMIgorSmirnov/search?query=${encoded}`;
+}
+```
+
+**Button HTML (inside `renderOpeningsTable`):**
+```html
+<a href="${getVideoLearningUrl(opening.opening)}" target="_blank" class="opening-link opening-link-video">📺 Video Learning</a>
+```
+
+**CSS style:**
+```css
+.opening-link-video {
+    background-color: #3498db;
+    color: white;
+}
+.opening-link-video:hover {
+    background-color: #2980b9;
+}
+```
+
+### Testing Strategy
+
+**Phase 1: Unit / Manual Tests**
+- Verify "Video Learning" button appears for each opening row (White and Black)
+- Verify button opens a new tab (not same tab navigation)
+- Verify URL format: `https://www.youtube.com/@GMIgorSmirnov/search?query=<opening>`
+- Verify URL encoding: "Sicilian Defense" → `Sicilian%20Defense` or `Sicilian+Defense`
+- Verify fallback URL when opening name is null/empty
+- Verify button styling is consistent with other opening link buttons
+
+**Phase 2: E2E Tests (Playwright)**
+- Load analytics page with a real Chess.com username
+- Verify "📺 Video Learning" button renders inside opening rows
+- Click button and verify new tab opens with correct YouTube channel search URL
+- Verify fallback behavior when opening name is missing
+
+### Documentation Updates
+- [ ] Update `documentation.md` with changes summary
+- [ ] Update `milestone_progress.md` if applicable
+
+---
 
 ## Iteration 12 - February 27, 2026
 
@@ -3232,7 +3506,7 @@ class ChessAdvisorService:
 
 * Playwright for E2E testing
 * unittest/pytest for backend unit tests
-* Test with real user data (username: 'jay_fh')
+* Test with real user data (username: 'hikaru' or other valid username)
 * OpenAI API cost monitoring and logging
 
 **Development tools**
@@ -3315,36 +3589,31 @@ The analytics dashboard will be a single-page scrollable experience with a clean
 └─────────────────────────────────────────────┘
 ┌─────────────────────────────────────────────┐
 │ Analysis Header Card                        │
-│ Username: jay_fh                            │
+│ Username: hikaru                            │
 │ Period: Jan 1 - Mar 31, 2025               │
 │ Timezone: America/New_York                  │
 │ Total Games: 150                            │
 └─────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────┐
-│ Section 1: Overall Performance Over Time    │
-│ [Line Chart: Wins/Losses/Draws]            │
+│ Section 1: Performance Over Time (Unified)  │
+│ [Chart: 3 lines - Overall/White/Black]     │
+│ [White Summary Card] [Black Summary Card]   │
 └─────────────────────────────────────────────┘
 
-┌──────────────────────┬──────────────────────┐
-│ Section 2a:          │ Section 2b:          │
-│ White Performance    │ Black Performance    │
-│ [Chart]              │ [Chart]              │
-└──────────────────────┴──────────────────────┘
-
 ┌─────────────────────────────────────────────┐
-│ Section 3: Elo Rating Progression           │
+│ Section 2: Elo Rating Progression           │
 │ [Line Chart with trend]                     │
 └─────────────────────────────────────────────┘
 
 ┌──────────────────────┬──────────────────────┐
-│ Section 4:           │ Section 5:           │
+│ Section 3:           │ Section 4:           │
 │ How You Win          │ How You Lose         │
 │ [Doughnut Chart]     │ [Doughnut Chart]     │
 └──────────────────────┴──────────────────────┘
 
 ┌─────────────────────────────────────────────┐
-│ Section 6: Opening Performance              │
+│ Section 5: Opening Performance              │
 │ Top 5 Best Openings                         │
 │ [Horizontal bar chart]                      │
 │ Top 5 Worst Openings                        │
@@ -3352,25 +3621,25 @@ The analytics dashboard will be a single-page scrollable experience with a clean
 └─────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────┐
-│ Section 7: Opponent Strength Analysis       │
+│ Section 6: Opponent Strength Analysis       │
 │ [Grouped bar chart or 3 cards]             │
 │ Lower | Similar | Higher                    │
 └─────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────┐
-│ Section 8: Time of Day Performance          │
+│ Section 7: Time of Day Performance          │
 │ [Grouped bar chart or 3 cards]             │
 │ Morning | Afternoon | Night                 │
 └─────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────┐
-│ Section 9: Mistake Analysis by Game Stage   │
+│ Section 8: Mistake Analysis by Game Stage   │
 │ [Table: Early/Middle/Endgame mistakes]     │
 │ Inaccuracies | Mistakes | Blunders          │
 └─────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────┐
-│ Section 10: AI Chess Coach                  │
+│ Section 9: AI Chess Coach                   │
 │ 🤖 Personalized Recommendations             │
 │ • Section-specific suggestions (up to 7)    │
 │ • Overall recommendation                    │

@@ -88,9 +88,9 @@ class TestAnalyticsDashboard:
         expect(page.locator("#dashboardResults")).to_be_visible(timeout=30000)
         
         # Verify critical sections are rendered
+        # Note: overallPerformanceSection removed in Iteration 14 (merged into colorPerformanceSection)
         sections_to_check = [
-            "#overallPerformanceSection",
-            "#colorPerformanceSection",
+            "#colorPerformanceChart",  # Now includes overall + white + black (3 lines)
             "#eloProgressionSection",
             "#terminationWinsChart",
             "#terminationLossesChart",
@@ -167,6 +167,51 @@ class TestAnalyticsDashboard:
             if card.is_visible():
                 stats_div = card.locator(".time-stats")
                 expect(stats_div).not_to_be_empty()
+    
+    def test_username_placeholder_updated(self, page: Page, base_url: str):
+        """EA-029: Test that username placeholder is 'hikaru' (Iteration 14)."""
+        page.goto(f"{base_url}/")
+        
+        username_input = page.locator("#username")
+        placeholder = username_input.get_attribute("placeholder")
+        
+        assert placeholder == "e.g., hikaru", f"Expected placeholder 'e.g., hikaru', got '{placeholder}'"
+    
+    def test_unified_chart_has_three_lines(self, page: Page, base_url: str):
+        """EA-028: Test that unified performance chart has Overall, White, and Black lines (Iteration 14)."""
+        page.goto(f"{base_url}/")
+        
+        # Fill and submit form
+        page.fill("#username", "jay_fh")
+        page.fill("#startDate", "2026-02-07")
+        page.fill("#endDate", "2026-02-14")
+        page.click("button[type='submit']")
+        
+        # Wait for results
+        expect(page.locator("#dashboardResults")).to_be_visible(timeout=30000)
+        page.wait_for_timeout(2000)  # Wait for chart to render
+        
+        # Verify colorPerformanceChart exists (overall performance chart was removed)
+        chart_canvas = page.locator("#colorPerformanceChart")
+        expect(chart_canvas).to_be_visible()
+        
+        # Use Chart.js API to verify 3 datasets
+        dataset_count = page.evaluate('''() => {
+            const chart = Chart.getChart('colorPerformanceChart');
+            return chart ? chart.data.datasets.length : 0;
+        }''')
+        
+        assert dataset_count == 3, f"Expected 3 datasets (Overall, White, Black), got {dataset_count}"
+        
+        # Verify legend labels
+        labels = page.evaluate('''() => {
+            const chart = Chart.getChart('colorPerformanceChart');
+            return chart ? chart.data.datasets.map(ds => ds.label) : [];
+        }''')
+        
+        assert 'Overall Win Rate' in labels, "Missing 'Overall Win Rate' label"
+        assert 'White Win Rate' in labels, "Missing 'White Win Rate' label"
+        assert 'Black Win Rate' in labels, "Missing 'Black Win Rate' label"
 
 
 class TestAPIEndpoints:
@@ -370,6 +415,61 @@ class TestMistakeAnalysis:
         rows = table_body.locator("tr")
         row_count = rows.count()
         assert row_count == 4, f"Expected 4 table rows, found {row_count}"
+
+
+class TestVideoLearningButton:
+    """EA-027: Tests for the Video Learning button in the Opening Performance section."""
+
+    def test_video_learning_button_exists(self, page: Page, base_url: str):
+        """Video Learning buttons render in opening rows after analysis loads."""
+        page.goto(f"{base_url}/")
+
+        page.fill("#username", "jay_fh")
+        page.fill("#startDate", "2026-02-07")
+        page.fill("#endDate", "2026-02-14")
+        page.click("button[type='submit']")
+
+        expect(page.locator("#dashboardResults")).to_be_visible(timeout=30000)
+
+        # Wait for openings to render
+        expect(page.locator("#whiteOpeningsSection, #blackOpeningsSection").first).to_be_visible(timeout=15000)
+
+        video_buttons = page.locator("a.opening-link-video")
+        assert video_buttons.count() > 0, "No Video Learning buttons found in opening rows"
+
+    def test_video_learning_button_href_format(self, page: Page, base_url: str):
+        """Video Learning button URL contains the Remote Chess Academy channel search path."""
+        page.goto(f"{base_url}/")
+
+        page.fill("#username", "jay_fh")
+        page.fill("#startDate", "2026-02-07")
+        page.fill("#endDate", "2026-02-14")
+        page.click("button[type='submit']")
+
+        expect(page.locator("#dashboardResults")).to_be_visible(timeout=30000)
+        expect(page.locator("#whiteOpeningsSection, #blackOpeningsSection").first).to_be_visible(timeout=15000)
+
+        first_button = page.locator("a.opening-link-video").first
+        href = first_button.get_attribute("href")
+        assert href is not None, "Video Learning button has no href"
+        assert "@GMIgorSmirnov/search?query=" in href or "youtube.com/watch" in href, \
+            f"Unexpected Video Learning URL: {href}"
+
+    def test_video_learning_button_opens_new_tab(self, page: Page, base_url: str):
+        """Video Learning button has target=_blank (opens in new tab)."""
+        page.goto(f"{base_url}/")
+
+        page.fill("#username", "jay_fh")
+        page.fill("#startDate", "2026-02-07")
+        page.fill("#endDate", "2026-02-14")
+        page.click("button[type='submit']")
+
+        expect(page.locator("#dashboardResults")).to_be_visible(timeout=30000)
+        expect(page.locator("#whiteOpeningsSection, #blackOpeningsSection").first).to_be_visible(timeout=15000)
+
+        first_button = page.locator("a.opening-link-video").first
+        target = first_button.get_attribute("target")
+        assert target == "_blank", f"Expected target='_blank', got '{target}'"
 
 
 class TestErrorHandling:
