@@ -336,6 +336,20 @@ function renderAnalysisHeader(data) {
     document.getElementById('displayTimezone').textContent = data.timezone;
     document.getElementById('displayTotalGames').textContent = 
         `${data.total_games} games analyzed`;
+
+    // Show Deep Check Analysis button
+    const deepBtn = document.getElementById('deepAnalysisBtn');
+    if (deepBtn && data.username && data.start_date && data.end_date) {
+        deepBtn.style.display = 'inline-block';
+        deepBtn.onclick = function() {
+            const params = new URLSearchParams({
+                username: data.username,
+                start_date: data.start_date,
+                end_date: data.end_date,
+            });
+            window.location.href = '/deep-analysis?' + params.toString();
+        };
+    }
 }
 
 // Section 1: Color Performance (Unified Chart with Overall/White/Black)

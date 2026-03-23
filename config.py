@@ -65,6 +65,10 @@ class Config:
     # AI Advisor cache settings
     AI_ADVICE_CACHE_TTL = 3600  # 1 hour in seconds
 
+    # Deep Check Analysis settings (PRD: chess_page_analysis v2.0)
+    DEEP_ANALYSIS_MAX_GAMES = int(os.environ.get('DEEP_ANALYSIS_MAX_GAMES', '20'))
+    DEEP_ANALYSIS_CACHE_TTL = int(os.environ.get('DEEP_ANALYSIS_CACHE_TTL', '1800'))  # 30 min
+
 
 class DevelopmentConfig(Config):
     """Development configuration."""

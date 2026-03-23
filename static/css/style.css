@@ -643,9 +643,16 @@ body {
     align-items: center;
 }
 
+.header-title-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 0.5rem;
+}
+
 .header-main h2 {
     font-size: 1.8rem;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0;
     color: var(--primary-color);
 }
 
@@ -679,6 +686,23 @@ body {
 .btn-export:hover {
     background-color: var(--dark-gray);
     color: var(--white);
+}
+
+/* Deep Check Analysis button */
+.btn-deep-analysis {
+    padding: 0.5rem 1.2rem;
+    background-color: #8e44ad;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.85rem;
+    transition: background-color 0.3s;
+    white-space: nowrap;
+}
+.btn-deep-analysis:hover {
+    background-color: #6c3483;
 }
 
 /* Analytics Sections */

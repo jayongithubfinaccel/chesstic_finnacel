@@ -11,6 +11,8 @@ import shutil
 from app.routes import api_bp
 from app.services.chess_service import ChessService
 from app.services.analytics_service import AnalyticsService
+from app.services.deep_analysis_service import DeepAnalysisService
+import chess
 from app.utils.validators import validate_username, validate_date_range, validate_timezone, get_date_range_error
 from app.utils import task_manager
 import logging
@@ -504,3 +506,174 @@ def get_mistake_analysis_status(task_id):
             'error': 'Internal server error',
             'details': str(e)
         }), 500
+
+
+# ------------------------------------------------------------------
+# Deep Check Analysis endpoints (PRD: chess_page_analysis)
+# ------------------------------------------------------------------
+
+def run_deep_analysis_background(task_id: str, games: list, username: str, config: dict):
+    """Run deep analysis in a background thread."""
+    try:
+        logger.info(f"Starting deep analysis background task {task_id}")
+        service = DeepAnalysisService(
+            stockfish_path=config.get('STOCKFISH_PATH', 'stockfish'),
+            engine_nodes=config.get('ENGINE_NODES', 50000),
+            engine_depth=config.get('ENGINE_DEPTH', 10),
+            engine_time_limit=config.get('ENGINE_TIME_LIMIT', 0.5),
+            use_lichess_cloud=config.get('USE_LICHESS_CLOUD', False),
+            lichess_timeout=config.get('LICHESS_API_TIMEOUT', 5.0),
+            max_games=config.get('DEEP_ANALYSIS_MAX_GAMES', 20),
+            openai_api_key=config.get('OPENAI_API_KEY', ''),
+            openai_model=config.get('OPENAI_MODEL', 'gpt-4o-mini'),
+        )
+
+        def progress_callback(current, total):
+            task_manager.update_task_progress(task_id, current, 'processing')
+
+        result = service.analyze(games, username, progress_callback=progress_callback)
+        task_manager.complete_task(task_id, result)
+        logger.info(f"Deep analysis task {task_id} completed")
+    except Exception as e:
+        logger.error(f"Deep analysis task {task_id} failed: {e}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        task_manager.fail_task(task_id, str(e))
+
+
+@api_bp.route('/deep-analysis', methods=['POST'])
+def deep_analysis():
+    """
+    Start deep check analysis for a user's games.
+    Returns a task_id for polling progress.
+    """
+    try:
+        data = request.get_json(silent=True)
+        if data is None:
+            return jsonify({'error': 'Request body must be JSON', 'status': 'error'}), 400
+
+        username = data.get('username')
+        start_date = data.get('start_date')
+        end_date = data.get('end_date')
+
+        if not username or not validate_username(username):
+            return jsonify({'error': 'Invalid username', 'status': 'error'}), 400
+
+        if not start_date or not end_date or not validate_date_range(start_date, end_date):
+            return jsonify({'error': 'Invalid date range', 'status': 'error'}), 400
+
+        date_error = get_date_range_error(start_date, end_date)
+        if date_error:
+            return jsonify({'error': date_error, 'status': 'error'}), 400
+
+        # Verify user exists
+        chess_service = ChessService()
+        try:
+            chess_service.get_player_profile(username)
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 404:
+                return jsonify({'error': f'User "{username}" not found on Chess.com', 'status': 'error'}), 404
+            return jsonify({'error': 'Chess.com API error', 'status': 'error'}), 503
+
+        # Fetch games
+        try:
+            result = chess_service.analyze_games(username, start_date, end_date)
+            games = result.get('games', [])
+        except Exception as e:
+            logger.error(f"Error fetching games for deep analysis: {e}")
+            return jsonify({'error': 'Failed to fetch games', 'status': 'error'}), 503
+
+        if not games:
+            return jsonify({
+                'error': 'No games found in the selected period',
+                'status': 'error',
+            }), 200
+
+        # Start background task
+        task_id = str(uuid.uuid4())
+        task_manager.create_task(task_id, total_items=len(games) + 4, metadata={
+            'username': username,
+            'type': 'deep_analysis',
+        })
+
+        cfg = {
+            'STOCKFISH_PATH': current_app.config.get('STOCKFISH_PATH', 'stockfish'),
+            'ENGINE_NODES': current_app.config.get('ENGINE_NODES', 50000),
+            'ENGINE_DEPTH': current_app.config.get('ENGINE_DEPTH', 10),
+            'ENGINE_TIME_LIMIT': current_app.config.get('ENGINE_TIME_LIMIT', 0.5),
+            'USE_LICHESS_CLOUD': current_app.config.get('USE_LICHESS_CLOUD', False),
+            'LICHESS_API_TIMEOUT': current_app.config.get('LICHESS_API_TIMEOUT', 5.0),
+            'DEEP_ANALYSIS_MAX_GAMES': current_app.config.get('DEEP_ANALYSIS_MAX_GAMES', 20),
+            'OPENAI_API_KEY': current_app.config.get('OPENAI_API_KEY', ''),
+            'OPENAI_MODEL': current_app.config.get('OPENAI_MODEL', 'gpt-4o-mini'),
+        }
+
+        thread = threading.Thread(
+            target=run_deep_analysis_background,
+            args=(task_id, games, username, cfg),
+            daemon=True,
+        )
+        thread.start()
+
+        return jsonify({
+            'status': 'processing',
+            'task_id': task_id,
+            'message': f'Deep analysis started for {username}',
+        }), 202
+
+    except Exception as e:
+        logger.error(f"Error starting deep analysis: {e}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        return jsonify({'error': 'Internal server error', 'status': 'error'}), 500
+
+
+@api_bp.route('/deep-analysis/status/<task_id>', methods=['GET'])
+def deep_analysis_status(task_id):
+    """Poll for deep analysis task status."""
+    try:
+        status = task_manager.get_task_status(task_id)
+        if status is None:
+            return jsonify({'status': 'not_found', 'error': 'Task not found'}), 404
+        return jsonify(status), 200
+    except Exception as e:
+        logger.error(f"Error getting deep analysis status: {e}")
+        return jsonify({'status': 'error', 'error': str(e)}), 500
+
+
+@api_bp.route('/evaluate-position', methods=['POST'])
+def evaluate_position():
+    """
+    Evaluate a single position (for explore mode).
+    Accepts FEN, returns eval + best move.
+    """
+    try:
+        data = request.get_json(silent=True)
+        if data is None:
+            return jsonify({'error': 'Request body must be JSON'}), 400
+
+        fen = data.get('fen')
+        if not fen or not isinstance(fen, str):
+            return jsonify({'error': 'FEN string is required'}), 400
+
+        # Validate FEN
+        try:
+            chess.Board(fen)
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Invalid FEN string'}), 400
+
+        config = current_app.config
+        service = DeepAnalysisService(
+            stockfish_path=config.get('STOCKFISH_PATH', 'stockfish'),
+            engine_nodes=config.get('ENGINE_NODES', 50000),
+            use_lichess_cloud=config.get('USE_LICHESS_CLOUD', False),
+            lichess_timeout=config.get('LICHESS_API_TIMEOUT', 5.0),
+        )
+        result = service.evaluate_single_position(fen)
+
+        if 'error' in result:
+            return jsonify(result), 400
+
+        return jsonify(result), 200
+
+    except Exception as e:
+        logger.error(f"Error evaluating position: {e}")
+        return jsonify({'error': 'Internal server error'}), 500

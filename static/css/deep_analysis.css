@@ -1,0 +1,391 @@
+/* Deep Check Analysis styles — v2.0 single-column layout */
+
+/* Container */
+.da-container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+/* Header */
+.da-header {
+    text-align: center;
+    margin-bottom: 24px;
+}
+.da-header h2 {
+    font-size: 1.8rem;
+    margin-bottom: 8px;
+}
+.da-subtitle {
+    color: #666;
+    font-size: 0.95rem;
+}
+
+/* Loading */
+.da-loading {
+    display: flex;
+    justify-content: center;
+    padding: 60px 0;
+}
+.da-loading-card {
+    text-align: center;
+    background: #fff;
+    border-radius: 12px;
+    padding: 40px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    max-width: 400px;
+    width: 100%;
+}
+.da-loading-card h3 { margin-bottom: 8px; }
+.da-progress-bar {
+    height: 8px;
+    background: #e9ecef;
+    border-radius: 4px;
+    margin: 16px 0 8px;
+    overflow: hidden;
+}
+.da-progress-fill {
+    height: 100%;
+    background: #27ae60;
+    border-radius: 4px;
+    transition: width 0.3s ease;
+    width: 0%;
+}
+.da-progress-text {
+    color: #888;
+    font-size: 0.85rem;
+}
+
+/* Error */
+.da-error-card {
+    text-align: center;
+    background: #fff;
+    border-radius: 12px;
+    padding: 40px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    max-width: 500px;
+    margin: 60px auto;
+}
+.da-error-icon {
+    font-size: 3rem;
+    margin-bottom: 12px;
+}
+.da-btn {
+    display: inline-block;
+    padding: 10px 24px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 600;
+    margin-top: 16px;
+    cursor: pointer;
+    border: none;
+    font-size: 0.9rem;
+}
+.da-btn-primary {
+    background: #3498db;
+    color: #fff;
+}
+.da-btn-primary:hover {
+    background: #2980b9;
+}
+
+/* Board Grid — single column */
+.da-board-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+}
+
+/* Game Card */
+.da-game-card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    overflow: hidden;
+}
+
+/* Game Info Header */
+.da-game-info {
+    padding: 14px 18px;
+    background: #f8f9fa;
+    border-bottom: 1px solid #e9ecef;
+}
+.da-game-info .da-players {
+    font-weight: 600;
+    font-size: 0.95rem;
+    margin-bottom: 4px;
+}
+.da-game-info .da-game-meta {
+    font-size: 0.82rem;
+    color: #666;
+}
+.da-game-info .da-game-timestamp {
+    font-size: 0.8rem;
+    color: #999;
+    margin-top: 2px;
+}
+
+/* AI Summary */
+.da-ai-summary {
+    padding: 12px 18px;
+    background: #f0f4f8;
+    border-bottom: 1px solid #e2e8f0;
+    font-size: 0.88rem;
+    line-height: 1.55;
+    color: #2d3748;
+}
+.da-ai-summary-loading {
+    color: #a0aec0;
+    font-style: italic;
+}
+
+/* Board Area: eval bar + board + move list */
+.da-board-area {
+    display: flex;
+    padding: 14px;
+    gap: 10px;
+    min-height: 400px;
+}
+
+/* Eval Bar */
+.da-eval-bar {
+    width: 28px;
+    min-height: 380px;
+    border-radius: 4px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid #ccc;
+    position: relative;
+    flex-shrink: 0;
+}
+.da-eval-bar-black {
+    background: #333;
+    transition: flex-grow 0.3s ease;
+}
+.da-eval-bar-white {
+    background: #f0f0f0;
+    transition: flex-grow 0.3s ease;
+}
+.da-eval-value {
+    position: absolute;
+    top: 4px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: #fff;
+    text-shadow: 0 0 3px rgba(0,0,0,0.7);
+    z-index: 2;
+}
+
+/* Board wrapper — larger size */
+.da-board-wrapper {
+    flex: 0 0 auto;
+    position: relative;
+}
+.da-board-wrapper .board-container {
+    width: 400px;
+    height: 400px;
+}
+
+/* Move List */
+.da-move-list {
+    flex: 1 1 0;
+    min-width: 160px;
+    max-height: 400px;
+    overflow-y: auto;
+    font-size: 0.82rem;
+    font-family: monospace;
+    background: #fafafa;
+    border-radius: 6px;
+    padding: 6px;
+    border: 1px solid #e9ecef;
+}
+.da-move-row {
+    display: flex;
+    gap: 4px;
+    padding: 2px 4px;
+    border-radius: 3px;
+    cursor: pointer;
+}
+.da-move-row:hover {
+    background: #e9ecef;
+}
+.da-move-num {
+    width: 28px;
+    color: #888;
+    text-align: right;
+    flex-shrink: 0;
+}
+.da-move-white, .da-move-black {
+    flex: 1;
+    padding: 1px 4px;
+    border-radius: 3px;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+}
+.da-move-active {
+    background: #d4edff !important;
+    font-weight: 700;
+}
+/* Clock time in move list */
+.da-move-clock {
+    font-size: 0.7rem;
+    color: #999;
+    font-weight: 400;
+    margin-left: 4px;
+}
+.da-move-clock.time-pressure {
+    color: #e74c3c;
+    font-weight: 600;
+}
+/* Annotation colors */
+.da-move-blunder { background: #fdd; color: #c0392b; }
+.da-move-mistake { background: #fef0e0; color: #e67e22; }
+.da-move-inaccuracy { background: #fef9e0; color: #f39c12; }
+.da-move-good { background: #e0f8e0; color: #27ae60; }
+.da-move-brilliant { background: #d0f0d0; color: #1a8a40; font-weight: 700; }
+.da-move-explored {
+    background: #dce8f8;
+    color: #2c3e99;
+    font-style: italic;
+}
+
+/* Controls */
+.da-controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-top: 1px solid #e9ecef;
+    flex-wrap: wrap;
+}
+.da-nav-btn {
+    background: #f0f0f0;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    line-height: 1;
+}
+.da-nav-btn:hover { background: #e0e0e0; }
+.da-nav-btn.da-btn-mistake {
+    background: #e74c3c;
+    color: #fff;
+    border-color: #c0392b;
+}
+.da-nav-btn.da-btn-mistake:hover { background: #c0392b; }
+.da-nav-btn.da-btn-back-game {
+    background: #3498db;
+    color: #fff;
+    border-color: #2980b9;
+    display: none;
+}
+.da-nav-btn.da-btn-back-game.visible { display: inline-block; }
+
+/* Best move label */
+.da-best-move {
+    padding: 4px 14px;
+    font-size: 0.82rem;
+    color: #555;
+    border-top: 1px solid #e9ecef;
+    min-height: 26px;
+}
+.da-best-move .best-match { color: #27ae60; font-weight: 600; }
+
+/* Eval Chart — Lichess-style */
+.da-eval-chart-wrapper {
+    padding: 8px 14px 12px;
+    border-top: 1px solid #e9ecef;
+}
+.da-eval-chart-wrapper canvas {
+    width: 100% !important;
+    height: 120px !important;
+}
+
+/* Time Usage Chart */
+.da-time-chart-wrapper {
+    padding: 4px 14px 12px;
+    border-top: 1px solid #e9ecef;
+}
+.da-time-chart-wrapper canvas {
+    width: 100% !important;
+    height: 80px !important;
+}
+.da-time-chart-wrapper.hidden {
+    display: none;
+}
+
+/* Explore mode indicator */
+.da-game-card.da-explore-mode {
+    border: 3px solid #3498db;
+}
+
+/* Loading skeleton for boards */
+.da-board-skeleton {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    padding: 20px;
+    min-height: 450px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.da-board-skeleton .skeleton-pulse {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: linear-gradient(90deg, #e9ecef 25%, #f8f9fa 50%, #e9ecef 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+}
+@keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+    .da-board-wrapper .board-container {
+        width: 320px;
+        height: 320px;
+    }
+    .da-board-area { min-height: 320px; }
+    .da-eval-bar { min-height: 320px; }
+    .da-move-list { max-height: 320px; }
+}
+@media (max-width: 767px) {
+    .da-board-area {
+        flex-direction: column;
+        align-items: center;
+    }
+    .da-eval-bar {
+        width: 100%;
+        min-height: 20px;
+        height: 20px;
+        flex-direction: row;
+    }
+    .da-eval-bar-black, .da-eval-bar-white {
+        height: 100%;
+    }
+    .da-eval-value {
+        top: 0;
+        line-height: 20px;
+    }
+    .da-board-wrapper .board-container {
+        width: 300px;
+        height: 300px;
+    }
+    .da-move-list {
+        max-height: 200px;
+        width: 100%;
+    }
+}
+
+.hidden { display: none !important; }
