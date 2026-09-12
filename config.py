@@ -69,6 +69,12 @@ class Config:
     DEEP_ANALYSIS_MAX_GAMES = int(os.environ.get('DEEP_ANALYSIS_MAX_GAMES', '20'))
     DEEP_ANALYSIS_CACHE_TTL = int(os.environ.get('DEEP_ANALYSIS_CACHE_TTL', '1800'))  # 30 min
 
+    # Telegram Daily/Weekly Review settings (PRD: telegram_review)
+    TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '')
+    TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '')
+    CHESS_USERNAME = os.environ.get('CHESS_USERNAME', '')
+    REVIEW_TIMEZONE = os.environ.get('REVIEW_TIMEZONE', 'UTC')
+
 
 class DevelopmentConfig(Config):
     """Development configuration."""

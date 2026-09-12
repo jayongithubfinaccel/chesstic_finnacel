@@ -692,7 +692,7 @@ class AnalyticsService:
                 win_rate = (stats['wins'] / total * 100) if total > 0 else 0
                 
                 # Extract first 6 moves from sample PGN
-                first_moves = self._extract_first_six_moves(stats['sample_pgn'])
+                first_moves = self._extract_first_n_moves(stats['sample_pgn'], 6) or ''
                 fen = self._get_opening_position_fen(stats['sample_pgn'])
                 
                 # Generate Lichess URL
@@ -724,49 +724,128 @@ class AnalyticsService:
             'white': process_openings_by_color(white_opening_stats),
             'black': process_openings_by_color(black_opening_stats)
         }
-    
-    def _extract_first_six_moves(self, pgn_string: str) -> str:
+
+    def _analyze_opening_by_prefix_length(self, games: List[Dict], num_full_moves: int) -> Dict:
         """
-        Extract first 12 individual moves (6 full moves) in standard chess notation.
-        Format example: "1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 5. O-O Be7 6. Re1 b5"
-        
+        Group games by the literal first N full moves (move order), split by color,
+        labeling each group with its recognized opening name.
+
+        Unlike _analyze_opening_performance (which groups by opening name), this groups
+        by the exact move sequence text. A game is only included if it lasted at least
+        num_full_moves full moves (see _extract_first_n_moves) - games that ended earlier
+        are excluded from this length's grouping rather than being merged in under a
+        truncated/misleading move string.
+
+        Returns:
+            {'white': [...], 'black': [...]}, each a list of up to 5 entries
+            (ranked by raw game count) with moves, opening_name, games, wins,
+            losses, draws, win_rate.
+        """
+        white_stats = defaultdict(lambda: {
+            'wins': 0, 'losses': 0, 'draws': 0, 'games': 0, 'sample_pgn': None
+        })
+        black_stats = defaultdict(lambda: {
+            'wins': 0, 'losses': 0, 'draws': 0, 'games': 0, 'sample_pgn': None
+        })
+
+        for game in games:
+            moves_text = self._extract_first_n_moves(game.get('pgn', ''), num_full_moves)
+            if not moves_text:
+                continue
+
+            player_color = game['player_color']
+            result = game['result']
+            pgn = game.get('pgn', '')
+
+            stats = white_stats if player_color == 'white' else black_stats
+
+            stats[moves_text]['games'] += 1
+            if stats[moves_text]['sample_pgn'] is None:
+                stats[moves_text]['sample_pgn'] = pgn
+
+            if result == 'win':
+                stats[moves_text]['wins'] += 1
+            elif result == 'loss':
+                stats[moves_text]['losses'] += 1
+            else:
+                stats[moves_text]['draws'] += 1
+
+        def process_by_color(moves_stats):
+            entries = []
+            for moves_text, stats in moves_stats.items():
+                total = stats['games']
+                win_rate = (stats['wins'] / total * 100) if total > 0 else 0
+                opening_name = self._extract_opening_name(stats['sample_pgn'])
+
+                entries.append({
+                    'moves': moves_text,
+                    'opening_name': opening_name,
+                    'games': stats['games'],
+                    'wins': stats['wins'],
+                    'losses': stats['losses'],
+                    'draws': stats['draws'],
+                    'win_rate': round(win_rate, 2)
+                })
+
+            entries.sort(key=lambda x: x['games'], reverse=True)
+            return entries[:5]
+
+        return {
+            'white': process_by_color(white_stats),
+            'black': process_by_color(black_stats)
+        }
+
+    def _extract_first_n_moves(self, pgn_string: str, num_full_moves: int) -> Optional[str]:
+        """
+        Extract the first N full moves (2*N plies) in standard chess notation.
+        Format example (num_full_moves=6): "1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 5. O-O Be7 6. Re1 b5"
+
         Args:
             pgn_string: PGN string from game data
-            
+            num_full_moves: Number of full moves (move pairs) to extract
+
         Returns:
-            String with first 12 moves in standard notation, or empty string if error
+            String with the first N full moves in standard notation, or None if the
+            game ended before reaching N full moves (so a short game is never mistaken
+            for a genuine N-move prefix), or if the PGN is missing/unparseable.
         """
         if not pgn_string:
-            return ''
-        
+            return None
+
+        required_plies = num_full_moves * 2
+
         try:
             pgn = StringIO(pgn_string)
             game = chess.pgn.read_game(pgn)
-            
+
             if game is None:
-                return ''
-            
+                return None
+
+            all_moves = list(game.mainline_moves())
+            if len(all_moves) < required_plies:
+                return None
+
             board = game.board()
             moves = []
             move_number = 1
-            
-            for i, move in enumerate(list(game.mainline_moves())[:12]):
+
+            for i, move in enumerate(all_moves[:required_plies]):
                 san_move = board.san(move)
-                
+
                 # Add move number before White's move
                 if i % 2 == 0:
                     moves.append(f"{move_number}. {san_move}")
                 else:
                     moves.append(san_move)
                     move_number += 1
-                
+
                 board.push(move)
-            
+
             return ' '.join(moves)
-            
+
         except Exception as e:
-            logger.warning(f"Error extracting first 12 moves: {e}")
-            return ''
+            logger.warning(f"Error extracting first {num_full_moves} moves: {e}")
+            return None
     
     def _get_opening_position_fen(self, pgn_string: str) -> str:
         """

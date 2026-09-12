@@ -90,22 +90,27 @@ class ChessService:
         Returns:
             Analysis results with statistics
         """
+        from datetime import timedelta
+
         start = datetime.strptime(start_date, '%Y-%m-%d')
         end = datetime.strptime(end_date, '%Y-%m-%d')
-        
+        # end_date is inclusive of the entire day, so compare against the start
+        # of the following day (matches _filter_games_by_date's semantics)
+        end_exclusive = end + timedelta(days=1)
+
         all_games = []
         current = start
-        
+
         # Fetch games for each month in the range
         # Uses same logic as working notebook
         while current <= end:
             try:
                 games = self.get_games_by_month(username, current.year, current.month)
-                
+
                 # Filter games by date range (from notebook logic)
                 for game in games:
                     game_date = datetime.fromtimestamp(game.get('end_time', 0))
-                    if start <= game_date <= end:
+                    if start <= game_date < end_exclusive:
                         all_games.append(game)
                         
             except requests.exceptions.HTTPError:
